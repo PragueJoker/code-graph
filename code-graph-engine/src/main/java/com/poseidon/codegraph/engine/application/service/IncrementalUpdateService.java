@@ -5,6 +5,7 @@ import com.poseidon.codegraph.engine.application.repository.CodeGraphRepository;
 import com.poseidon.codegraph.engine.domain.context.CodeGraphContext;
 import com.poseidon.codegraph.engine.domain.model.event.ChangeType;
 import com.poseidon.codegraph.engine.domain.service.CodeGraphService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.stream.Collectors;
@@ -15,6 +16,7 @@ import java.util.stream.Collectors;
  * 1. 构建变更上下文（Data + Reader/Writer）
  * 2. 调用领域服务
  */
+@Slf4j
 @Service
 public class IncrementalUpdateService {
     
@@ -51,12 +53,21 @@ public class IncrementalUpdateService {
      */
     public void handleFileAdded(String projectRoot, String filePath,
                                              String[] classpathEntries, String[] sourcepathEntries) {
-        CodeGraphContext context = buildContext(projectRoot, classpathEntries, sourcepathEntries);
-        context.setChangeType(ChangeType.SOURCE_ADDED);
-        context.setOldFilePath(null);
-        context.setNewFilePath(filePath);
+        log.info("处理文件新增: file={}, classpathCount={}", filePath, 
+                 classpathEntries != null ? classpathEntries.length : 0);
         
-        codeGraphService.handle(context);
+        try {
+            CodeGraphContext context = buildContext(projectRoot, classpathEntries, sourcepathEntries);
+            context.setChangeType(ChangeType.SOURCE_ADDED);
+            context.setOldFilePath(null);
+            context.setNewFilePath(filePath);
+            
+            codeGraphService.handle(context);
+            log.info("文件新增处理完成: file={}", filePath);
+        } catch (Exception e) {
+            log.error("文件新增处理失败: file={}, error={}", filePath, e.getMessage(), e);
+            throw new RuntimeException("处理文件新增失败: " + filePath, e);
+        }
     }
     
     /**
@@ -64,12 +75,20 @@ public class IncrementalUpdateService {
      */
     public void handleFileDeleted(String projectRoot, String filePath,
                                                String[] classpathEntries, String[] sourcepathEntries) {
-        CodeGraphContext context = buildContext(projectRoot, classpathEntries, sourcepathEntries);
-        context.setChangeType(ChangeType.SOURCE_DELETED);
-        context.setOldFilePath(filePath);
-        context.setNewFilePath(null);
+        log.info("处理文件删除: file={}", filePath);
         
-        codeGraphService.handle(context);
+        try {
+            CodeGraphContext context = buildContext(projectRoot, classpathEntries, sourcepathEntries);
+            context.setChangeType(ChangeType.SOURCE_DELETED);
+            context.setOldFilePath(filePath);
+            context.setNewFilePath(null);
+            
+            codeGraphService.handle(context);
+            log.info("文件删除处理完成: file={}", filePath);
+        } catch (Exception e) {
+            log.error("文件删除处理失败: file={}, error={}", filePath, e.getMessage(), e);
+            throw new RuntimeException("处理文件删除失败: " + filePath, e);
+        }
     }
     
     /**
@@ -77,12 +96,21 @@ public class IncrementalUpdateService {
      */
     public void handleFileModified(String projectRoot, String filePath,
                                                 String[] classpathEntries, String[] sourcepathEntries) {
-        CodeGraphContext context = buildContext(projectRoot, classpathEntries, sourcepathEntries);
-        context.setChangeType(ChangeType.SOURCE_MODIFIED);
-        context.setOldFilePath(filePath);
-        context.setNewFilePath(filePath);
+        log.info("处理文件修改: file={}, classpathCount={}", filePath, 
+                 classpathEntries != null ? classpathEntries.length : 0);
         
-        codeGraphService.handle(context);
+        try {
+            CodeGraphContext context = buildContext(projectRoot, classpathEntries, sourcepathEntries);
+            context.setChangeType(ChangeType.SOURCE_MODIFIED);
+            context.setOldFilePath(filePath);
+            context.setNewFilePath(filePath);
+            
+            codeGraphService.handle(context);
+            log.info("文件修改处理完成: file={}", filePath);
+        } catch (Exception e) {
+            log.error("文件修改处理失败: file={}, error={}", filePath, e.getMessage(), e);
+            throw new RuntimeException("处理文件修改失败: " + filePath, e);
+        }
     }
     
     /**

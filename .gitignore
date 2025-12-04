@@ -30,6 +30,7 @@ Thumbs.db
 # Logs
 *.log
 logs/
+test-data/
 
 # Application
 application-local.yml

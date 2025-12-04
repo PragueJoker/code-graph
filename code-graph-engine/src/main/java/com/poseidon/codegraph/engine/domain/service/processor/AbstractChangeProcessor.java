@@ -63,14 +63,20 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
     
     protected int rebuildFileCallRelationships(CodeGraphContext context, String filePath, 
                                             CodeGraph graph) {
+        log.debug("开始重建调用关系: file={}", filePath);
+        
         if (graph == null) {
+            log.debug("graph 为空，重新解析文件: {}", filePath);
             graph = parseFile(context, filePath);
         }
         
         java.util.List<CallRelationship> relationships = graph.getRelationshipsAsList();
         if (relationships.isEmpty()) {
+            log.info("文件没有调用关系: file={}", filePath);
             return 0;
         }
+        
+        log.info("文件包含 {} 条调用关系: file={}", relationships.size(), filePath);
         
         // 批量查询：收集所有需要检查的节点ID
         java.util.Set<String> nodeIds = new java.util.HashSet<>();
@@ -79,10 +85,14 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
             nodeIds.add(rel.getToFunctionId());
         }
         
+        log.debug("收集到 {} 个需要检查的节点ID", nodeIds.size());
+        
         // 批量查询哪些节点已存在
         java.util.Set<String> existingIds = context.getReader()
             .getFindExistingFunctionsByQualifiedNames()
             .apply(new java.util.ArrayList<>(nodeIds));
+        
+        log.debug("数据库中已存在 {} 个节点", existingIds.size());
         
         // 批量创建占位符节点（不存在的节点）
         java.util.List<CodeFunction> placeholders = new java.util.ArrayList<>();
@@ -92,19 +102,19 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
                 String language = relationships.get(0).getLanguage();
                 CodeFunction placeholder = createPlaceholderFunction(nodeId, language);
                 placeholders.add(placeholder);
-                log.debug("创建占位符节点: {}", nodeId);
+                log.debug("需要创建占位符节点: {}", nodeId);
             }
         }
         
         // 批量保存占位符节点
         if (!placeholders.isEmpty()) {
+            log.info("批量创建占位符节点: count={}", placeholders.size());
             context.getWriter().getSaveFunctionsBatch().accept(placeholders);
-            log.debug("批量创建占位符节点: {} 个", placeholders.size());
         }
         
         // 批量保存调用关系
+        log.info("批量保存调用关系: count={}", relationships.size());
         context.getWriter().getSaveCallRelationshipsBatch().accept(relationships);
-        log.debug("批量保存调用关系: {} 条", relationships.size());
         
         return relationships.size();
     }
