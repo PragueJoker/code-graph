@@ -50,4 +50,10 @@ public class GraphReader {
      * Input: List<qualifiedName> -> Output: Set<existingQualifiedName>
      */
     private Function<java.util.List<String>, java.util.Set<String>> findExistingUnitsByQualifiedNames;
+    
+    /**
+     * 批量查询包是否存在
+     * Input: List<qualifiedName> -> Output: Set<existingQualifiedName>
+     */
+    private Function<java.util.List<String>, java.util.Set<String>> findExistingPackagesByQualifiedNames;
 }

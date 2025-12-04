@@ -51,6 +51,13 @@ public interface CodeGraphRepository {
      */
     java.util.Set<String> findExistingUnitsByQualifiedNames(java.util.List<String> qualifiedNames);
     
+    /**
+     * 批量查询包是否存在
+     * @param qualifiedNames 全限定名列表
+     * @return 存在的全限定名集合
+     */
+    java.util.Set<String> findExistingPackagesByQualifiedNames(java.util.List<String> qualifiedNames);
+    
     // ========== 删除操作 ==========
     
     /**
@@ -77,26 +84,48 @@ public interface CodeGraphRepository {
     
     void saveCallRelationship(CallRelationshipDO relationship);
     
-    // ========== 批量保存操作 ==========
+    // ========== 批量插入操作 ==========
     
     /**
-     * 批量保存函数（先查询是否存在，存在则更新，不存在则插入）
+     * 批量插入函数（纯数据库操作，不做存在性检查）
      */
-    void saveFunctionsBatch(java.util.List<CodeFunctionDO> functions);
+    void insertFunctionsBatch(java.util.List<CodeFunctionDO> functions);
     
     /**
-     * 批量保存单元（先查询是否存在，存在则更新，不存在则插入）
+     * 批量插入单元（纯数据库操作，不做存在性检查）
      */
-    void saveUnitsBatch(java.util.List<CodeUnitDO> units);
+    void insertUnitsBatch(java.util.List<CodeUnitDO> units);
     
     /**
-     * 批量保存包（先查询是否存在，存在则更新，不存在则插入）
+     * 批量插入包（纯数据库操作，不做存在性检查）
      */
-    void savePackagesBatch(java.util.List<CodePackageDO> packages);
+    void insertPackagesBatch(java.util.List<CodePackageDO> packages);
     
     /**
-     * 批量保存调用关系
+     * 批量插入调用关系（纯数据库操作，不做存在性检查）
      */
-    void saveCallRelationshipsBatch(java.util.List<CallRelationshipDO> relationships);
+    void insertCallRelationshipsBatch(java.util.List<CallRelationshipDO> relationships);
+    
+    // ========== 批量更新操作 ==========
+    
+    /**
+     * 批量更新函数（纯数据库操作，不做存在性检查）
+     */
+    void updateFunctionsBatch(java.util.List<CodeFunctionDO> functions);
+    
+    /**
+     * 批量更新单元（纯数据库操作，不做存在性检查）
+     */
+    void updateUnitsBatch(java.util.List<CodeUnitDO> units);
+    
+    /**
+     * 批量更新包（纯数据库操作，不做存在性检查）
+     */
+    void updatePackagesBatch(java.util.List<CodePackageDO> packages);
+    
+    /**
+     * 批量更新调用关系（纯数据库操作，不做存在性检查）
+     */
+    void updateCallRelationshipsBatch(java.util.List<CallRelationshipDO> relationships);
 }
 

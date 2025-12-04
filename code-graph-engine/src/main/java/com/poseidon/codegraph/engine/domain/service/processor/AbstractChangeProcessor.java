@@ -39,19 +39,122 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
     
     protected void saveNodes(CodeGraph graph, CodeGraphContext context) {
         // 批量保存：先查询是否存在，存在则更新，不存在则插入
+        
+        // 1. 处理 Packages
         java.util.List<CodePackage> packages = graph.getPackagesAsList();
         if (!packages.isEmpty()) {
-            context.getWriter().getSavePackagesBatch().accept(packages);
+            savePackagesWithCheck(packages, context);
         }
         
+        // 2. 处理 Units
         java.util.List<CodeUnit> units = graph.getUnitsAsList();
         if (!units.isEmpty()) {
-            context.getWriter().getSaveUnitsBatch().accept(units);
+            saveUnitsWithCheck(units, context);
         }
         
+        // 3. 处理 Functions
         java.util.List<CodeFunction> functions = graph.getFunctionsAsList();
         if (!functions.isEmpty()) {
-            context.getWriter().getSaveFunctionsBatch().accept(functions);
+            saveFunctionsWithCheck(functions, context);
+        }
+    }
+    
+    /**
+     * 批量保存包：先查询存在性，然后分离插入/更新
+     */
+    private void savePackagesWithCheck(java.util.List<CodePackage> packages, CodeGraphContext context) {
+        // 查询哪些包已存在
+        java.util.List<String> packageIds = packages.stream()
+            .map(CodePackage::getId)
+            .collect(java.util.stream.Collectors.toList());
+        java.util.Set<String> existingIds = context.getReader()
+            .getFindExistingPackagesByQualifiedNames()
+            .apply(packageIds);
+        
+        // 分离需要插入和更新的包
+        java.util.List<CodePackage> toInsert = new java.util.ArrayList<>();
+        java.util.List<CodePackage> toUpdate = new java.util.ArrayList<>();
+        
+        for (CodePackage pkg : packages) {
+            if (existingIds.contains(pkg.getId())) {
+                toUpdate.add(pkg);
+            } else {
+                toInsert.add(pkg);
+            }
+        }
+        
+        // 批量插入和更新
+        if (!toInsert.isEmpty()) {
+            context.getWriter().getInsertPackagesBatch().accept(toInsert);
+        }
+        if (!toUpdate.isEmpty()) {
+            context.getWriter().getUpdatePackagesBatch().accept(toUpdate);
+        }
+    }
+    
+    /**
+     * 批量保存单元：先查询存在性，然后分离插入/更新
+     */
+    private void saveUnitsWithCheck(java.util.List<CodeUnit> units, CodeGraphContext context) {
+        // 查询哪些单元已存在
+        java.util.List<String> unitIds = units.stream()
+            .map(CodeUnit::getId)
+            .collect(java.util.stream.Collectors.toList());
+        java.util.Set<String> existingIds = context.getReader()
+            .getFindExistingUnitsByQualifiedNames()
+            .apply(unitIds);
+        
+        // 分离需要插入和更新的单元
+        java.util.List<CodeUnit> toInsert = new java.util.ArrayList<>();
+        java.util.List<CodeUnit> toUpdate = new java.util.ArrayList<>();
+        
+        for (CodeUnit unit : units) {
+            if (existingIds.contains(unit.getId())) {
+                toUpdate.add(unit);
+            } else {
+                toInsert.add(unit);
+            }
+        }
+        
+        // 批量插入和更新
+        if (!toInsert.isEmpty()) {
+            context.getWriter().getInsertUnitsBatch().accept(toInsert);
+        }
+        if (!toUpdate.isEmpty()) {
+            context.getWriter().getUpdateUnitsBatch().accept(toUpdate);
+        }
+    }
+    
+    /**
+     * 批量保存函数：先查询存在性，然后分离插入/更新
+     */
+    private void saveFunctionsWithCheck(java.util.List<CodeFunction> functions, CodeGraphContext context) {
+        // 查询哪些函数已存在
+        java.util.List<String> functionIds = functions.stream()
+            .map(CodeFunction::getId)
+            .collect(java.util.stream.Collectors.toList());
+        java.util.Set<String> existingIds = context.getReader()
+            .getFindExistingFunctionsByQualifiedNames()
+            .apply(functionIds);
+        
+        // 分离需要插入和更新的函数
+        java.util.List<CodeFunction> toInsert = new java.util.ArrayList<>();
+        java.util.List<CodeFunction> toUpdate = new java.util.ArrayList<>();
+        
+        for (CodeFunction func : functions) {
+            if (existingIds.contains(func.getId())) {
+                toUpdate.add(func);
+            } else {
+                toInsert.add(func);
+            }
+        }
+        
+        // 批量插入和更新
+        if (!toInsert.isEmpty()) {
+            context.getWriter().getInsertFunctionsBatch().accept(toInsert);
+        }
+        if (!toUpdate.isEmpty()) {
+            context.getWriter().getUpdateFunctionsBatch().accept(toUpdate);
         }
     }
     
@@ -106,15 +209,15 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
             }
         }
         
-        // 批量保存占位符节点
+        // 批量插入占位符节点（占位符节点是新创建的，直接插入）
         if (!placeholders.isEmpty()) {
             log.info("批量创建占位符节点: count={}", placeholders.size());
-            context.getWriter().getSaveFunctionsBatch().accept(placeholders);
+            context.getWriter().getInsertFunctionsBatch().accept(placeholders);
         }
         
-        // 批量保存调用关系
-        log.info("批量保存调用关系: count={}", relationships.size());
-        context.getWriter().getSaveCallRelationshipsBatch().accept(relationships);
+        // 批量插入调用关系（调用关系是新创建的，直接插入）
+        log.info("批量插入调用关系: count={}", relationships.size());
+        context.getWriter().getInsertCallRelationshipsBatch().accept(relationships);
         
         return relationships.size();
     }

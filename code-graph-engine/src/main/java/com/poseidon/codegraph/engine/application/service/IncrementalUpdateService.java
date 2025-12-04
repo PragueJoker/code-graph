@@ -153,6 +153,10 @@ public class IncrementalUpdateService {
             repository.findExistingUnitsByQualifiedNames(qualifiedNames)
         );
         
+        context.getReader().setFindExistingPackagesByQualifiedNames(qualifiedNames -> 
+            repository.findExistingPackagesByQualifiedNames(qualifiedNames)
+        );
+        
         // ========== 修改函数 (Writer) ==========
         
         context.getWriter().setDeleteFileOutgoingCalls(filePath -> 
@@ -179,34 +183,68 @@ public class IncrementalUpdateService {
             repository.saveCallRelationship(CodeGraphConverter.toDO(relationship))
         );
         
-        // ========== 批量保存函数 ==========
+        // ========== 批量插入函数 ==========
         
-        context.getWriter().setSavePackagesBatch(packages -> 
-            repository.savePackagesBatch(
+        context.getWriter().setInsertPackagesBatch(packages -> 
+            repository.insertPackagesBatch(
                 packages.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())
             )
         );
         
-        context.getWriter().setSaveUnitsBatch(units -> 
-            repository.saveUnitsBatch(
+        context.getWriter().setInsertUnitsBatch(units -> 
+            repository.insertUnitsBatch(
                 units.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())
             )
         );
         
-        context.getWriter().setSaveFunctionsBatch(functions -> 
-            repository.saveFunctionsBatch(
+        context.getWriter().setInsertFunctionsBatch(functions -> 
+            repository.insertFunctionsBatch(
                 functions.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())
             )
         );
         
-        context.getWriter().setSaveCallRelationshipsBatch(relationships -> 
-            repository.saveCallRelationshipsBatch(
+        context.getWriter().setInsertCallRelationshipsBatch(relationships -> 
+            repository.insertCallRelationshipsBatch(
+                relationships.stream()
+                    .map(CodeGraphConverter::toDO)
+                    .collect(Collectors.toList())
+            )
+        );
+        
+        // ========== 批量更新函数 ==========
+        
+        context.getWriter().setUpdatePackagesBatch(packages -> 
+            repository.updatePackagesBatch(
+                packages.stream()
+                    .map(CodeGraphConverter::toDO)
+                    .collect(Collectors.toList())
+            )
+        );
+        
+        context.getWriter().setUpdateUnitsBatch(units -> 
+            repository.updateUnitsBatch(
+                units.stream()
+                    .map(CodeGraphConverter::toDO)
+                    .collect(Collectors.toList())
+            )
+        );
+        
+        context.getWriter().setUpdateFunctionsBatch(functions -> 
+            repository.updateFunctionsBatch(
+                functions.stream()
+                    .map(CodeGraphConverter::toDO)
+                    .collect(Collectors.toList())
+            )
+        );
+        
+        context.getWriter().setUpdateCallRelationshipsBatch(relationships -> 
+            repository.updateCallRelationshipsBatch(
                 relationships.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())

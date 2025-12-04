@@ -342,205 +342,226 @@ public class Neo4jCodeGraphRepository implements CodeGraphRepository {
         }
     }
     
-    // ========== 批量保存操作 ==========
+    @Override
+    public java.util.Set<String> findExistingPackagesByQualifiedNames(java.util.List<String> qualifiedNames) {
+        if (qualifiedNames == null || qualifiedNames.isEmpty()) {
+            return new java.util.HashSet<>();
+        }
+        
+        String cypher = """
+            MATCH (p:CodePackage)
+            WHERE p.id IN $qualifiedNames OR p.qualifiedName IN $qualifiedNames
+            RETURN DISTINCT COALESCE(p.id, p.qualifiedName) AS id
+            """;
+        
+        try (Session session = neo4jDriver.session()) {
+            return session.run(cypher, Values.parameters("qualifiedNames", qualifiedNames))
+                .stream()
+                .map(record -> record.get("id").asString())
+                .collect(java.util.stream.Collectors.toSet());
+        }
+    }
+    
+    // ========== 批量插入操作 ==========
     
     @Override
-    public void saveFunctionsBatch(java.util.List<CodeFunctionDO> functions) {
+    public void insertFunctionsBatch(java.util.List<CodeFunctionDO> functions) {
         if (functions == null || functions.isEmpty()) {
-            log.debug("批量保存函数: 列表为空，跳过");
             return;
         }
         
-        log.debug("批量保存函数开始: count={}", functions.size());
+        log.debug("批量插入函数开始: count={}", functions.size());
         
-        try {
-            // 先查询哪些节点已存在
-            java.util.List<String> qualifiedNames = functions.stream()
-                .map(CodeFunctionDO::getId)
-                .collect(java.util.stream.Collectors.toList());
-            java.util.Set<String> existingIds = findExistingFunctionsByQualifiedNames(qualifiedNames);
-            
-            log.debug("已存在节点: {}, 新增节点: {}", existingIds.size(), functions.size() - existingIds.size());
-            
-            // 分离需要插入和更新的节点
-            java.util.List<CodeFunctionDO> toInsert = new java.util.ArrayList<>();
-            java.util.List<CodeFunctionDO> toUpdate = new java.util.ArrayList<>();
-            
-            for (CodeFunctionDO func : functions) {
-                if (existingIds.contains(func.getId())) {
-                    toUpdate.add(func);
-                } else {
-                    toInsert.add(func);
-                }
-            }
-            
-            // 批量插入
-            if (!toInsert.isEmpty()) {
-                String insertCypher = """
-                    UNWIND $functions AS func
-                    CREATE (f:CodeFunction {
-                        id: func.id,
-                        name: func.name,
-                        qualifiedName: func.qualifiedName,
-                        language: func.language,
-                        filePath: func.filePath,
-                        startLine: func.startLine,
-                        endLine: func.endLine,
-                        signature: func.signature,
-                        returnType: func.returnType,
-                        modifiers: func.modifiers,
-                        isStatic: func.isStatic,
-                        isAsync: func.isAsync,
-                        isConstructor: func.isConstructor,
-                        isPlaceholder: func.isPlaceholder
-                    })
-                    """;
-                
-                java.util.List<java.util.Map<String, Object>> insertParams = toInsert.stream()
-                    .map(this::functionToMap)
-                    .collect(java.util.stream.Collectors.toList());
-                
-                try (Session session = neo4jDriver.session()) {
-                    session.run(insertCypher, Values.parameters("functions", insertParams));
-                    log.info("批量插入函数成功: count={}", toInsert.size());
-                } catch (Exception e) {
-                    log.error("批量插入函数失败: count={}, error={}", toInsert.size(), e.getMessage(), e);
-                    throw new RuntimeException("批量插入函数失败", e);
-                }
-            }
+        String insertCypher = """
+            UNWIND $functions AS func
+            CREATE (f:CodeFunction {
+                id: func.id,
+                name: func.name,
+                qualifiedName: func.qualifiedName,
+                language: func.language,
+                filePath: func.filePath,
+                startLine: func.startLine,
+                endLine: func.endLine,
+                signature: func.signature,
+                returnType: func.returnType,
+                modifiers: func.modifiers,
+                isStatic: func.isStatic,
+                isAsync: func.isAsync,
+                isConstructor: func.isConstructor,
+                isPlaceholder: func.isPlaceholder
+            })
+            """;
         
-            // 批量更新
-            if (!toUpdate.isEmpty()) {
-                String updateCypher = """
-                    UNWIND $functions AS func
-                    MATCH (f:CodeFunction {id: func.id})
-                    SET f.name = func.name,
-                        f.qualifiedName = func.qualifiedName,
-                        f.language = func.language,
-                        f.filePath = func.filePath,
-                        f.startLine = func.startLine,
-                        f.endLine = func.endLine,
-                        f.signature = func.signature,
-                        f.returnType = func.returnType,
-                        f.modifiers = func.modifiers,
-                        f.isStatic = func.isStatic,
-                        f.isAsync = func.isAsync,
-                        f.isConstructor = func.isConstructor,
-                        f.isPlaceholder = func.isPlaceholder
-                    """;
-                
-                java.util.List<java.util.Map<String, Object>> updateParams = toUpdate.stream()
-                    .map(this::functionToMap)
-                    .collect(java.util.stream.Collectors.toList());
-                
-                try (Session session = neo4jDriver.session()) {
-                    session.run(updateCypher, Values.parameters("functions", updateParams));
-                    log.info("批量更新函数成功: count={}", toUpdate.size());
-                } catch (Exception e) {
-                    log.error("批量更新函数失败: count={}, error={}", toUpdate.size(), e.getMessage(), e);
-                    throw new RuntimeException("批量更新函数失败", e);
-                }
-            }
-            
-            log.info("批量保存函数完成: total={}, inserted={}, updated={}", 
-                     functions.size(), toInsert.size(), toUpdate.size());
+        java.util.List<java.util.Map<String, Object>> insertParams = functions.stream()
+            .map(this::functionToMap)
+            .collect(java.util.stream.Collectors.toList());
+        
+        try (Session session = neo4jDriver.session()) {
+            session.run(insertCypher, Values.parameters("functions", insertParams));
+            log.info("批量插入函数成功: count={}", functions.size());
         } catch (Exception e) {
-            log.error("批量保存函数失败: count={}, error={}", functions.size(), e.getMessage(), e);
-            throw new RuntimeException("批量保存函数失败", e);
+            log.error("批量插入函数失败: count={}, error={}", functions.size(), e.getMessage(), e);
+            throw new RuntimeException("批量插入函数失败", e);
         }
     }
     
     @Override
-    public void saveUnitsBatch(java.util.List<CodeUnitDO> units) {
+    public void updateFunctionsBatch(java.util.List<CodeFunctionDO> functions) {
+        if (functions == null || functions.isEmpty()) {
+            return;
+        }
+        
+        log.debug("批量更新函数开始: count={}", functions.size());
+        
+        String updateCypher = """
+            UNWIND $functions AS func
+            MATCH (f:CodeFunction {id: func.id})
+            SET f.name = func.name,
+                f.qualifiedName = func.qualifiedName,
+                f.language = func.language,
+                f.filePath = func.filePath,
+                f.startLine = func.startLine,
+                f.endLine = func.endLine,
+                f.signature = func.signature,
+                f.returnType = func.returnType,
+                f.modifiers = func.modifiers,
+                f.isStatic = func.isStatic,
+                f.isAsync = func.isAsync,
+                f.isConstructor = func.isConstructor,
+                f.isPlaceholder = func.isPlaceholder
+            """;
+        
+        java.util.List<java.util.Map<String, Object>> updateParams = functions.stream()
+            .map(this::functionToMap)
+            .collect(java.util.stream.Collectors.toList());
+        
+        try (Session session = neo4jDriver.session()) {
+            session.run(updateCypher, Values.parameters("functions", updateParams));
+            log.info("批量更新函数成功: count={}", functions.size());
+        } catch (Exception e) {
+            log.error("批量更新函数失败: count={}, error={}", functions.size(), e.getMessage(), e);
+            throw new RuntimeException("批量更新函数失败", e);
+        }
+    }
+    
+    @Override
+    public void insertUnitsBatch(java.util.List<CodeUnitDO> units) {
         if (units == null || units.isEmpty()) {
             return;
         }
         
-        // 先查询哪些节点已存在
-        java.util.List<String> qualifiedNames = units.stream()
-            .map(CodeUnitDO::getId)
+        log.debug("批量插入单元开始: count={}", units.size());
+        
+        String insertCypher = """
+            UNWIND $units AS unit
+            CREATE (u:CodeUnit {
+                id: unit.id,
+                name: unit.name,
+                qualifiedName: unit.qualifiedName,
+                language: unit.language,
+                filePath: unit.filePath,
+                startLine: unit.startLine,
+                endLine: unit.endLine,
+                unitType: unit.unitType,
+                modifiers: unit.modifiers,
+                isAbstract: unit.isAbstract,
+                packageId: unit.packageId
+            })
+            """;
+        
+        java.util.List<java.util.Map<String, Object>> insertParams = units.stream()
+            .map(this::unitToMap)
             .collect(java.util.stream.Collectors.toList());
-        java.util.Set<String> existingIds = findExistingUnitsByQualifiedNames(qualifiedNames);
         
-        // 分离需要插入和更新的节点
-        java.util.List<CodeUnitDO> toInsert = new java.util.ArrayList<>();
-        java.util.List<CodeUnitDO> toUpdate = new java.util.ArrayList<>();
-        
-        for (CodeUnitDO unit : units) {
-            if (existingIds.contains(unit.getId())) {
-                toUpdate.add(unit);
-            } else {
-                toInsert.add(unit);
-            }
-        }
-        
-        // 批量插入
-        if (!toInsert.isEmpty()) {
-            String insertCypher = """
-                UNWIND $units AS unit
-                CREATE (u:CodeUnit {
-                    id: unit.id,
-                    name: unit.name,
-                    qualifiedName: unit.qualifiedName,
-                    language: unit.language,
-                    filePath: unit.filePath,
-                    startLine: unit.startLine,
-                    endLine: unit.endLine,
-                    unitType: unit.unitType,
-                    modifiers: unit.modifiers,
-                    isAbstract: unit.isAbstract,
-                    packageId: unit.packageId
-                })
-                """;
-            
-            java.util.List<java.util.Map<String, Object>> insertParams = toInsert.stream()
-                .map(this::unitToMap)
-                .collect(java.util.stream.Collectors.toList());
-            
-            try (Session session = neo4jDriver.session()) {
-                session.run(insertCypher, Values.parameters("units", insertParams));
-                log.debug("批量插入单元: {} 个", toInsert.size());
-            }
-        }
-        
-        // 批量更新
-        if (!toUpdate.isEmpty()) {
-            String updateCypher = """
-                UNWIND $units AS unit
-                MATCH (u:CodeUnit {id: unit.id})
-                SET u.name = unit.name,
-                    u.qualifiedName = unit.qualifiedName,
-                    u.language = unit.language,
-                    u.filePath = unit.filePath,
-                    u.startLine = unit.startLine,
-                    u.endLine = unit.endLine,
-                    u.unitType = unit.unitType,
-                    u.modifiers = unit.modifiers,
-                    u.isAbstract = unit.isAbstract,
-                    u.packageId = unit.packageId
-                """;
-            
-            java.util.List<java.util.Map<String, Object>> updateParams = toUpdate.stream()
-                .map(this::unitToMap)
-                .collect(java.util.stream.Collectors.toList());
-            
-            try (Session session = neo4jDriver.session()) {
-                session.run(updateCypher, Values.parameters("units", updateParams));
-                log.debug("批量更新单元: {} 个", toUpdate.size());
-            }
+        try (Session session = neo4jDriver.session()) {
+            session.run(insertCypher, Values.parameters("units", insertParams));
+            log.info("批量插入单元成功: count={}", units.size());
+        } catch (Exception e) {
+            log.error("批量插入单元失败: count={}, error={}", units.size(), e.getMessage(), e);
+            throw new RuntimeException("批量插入单元失败", e);
         }
     }
     
     @Override
-    public void savePackagesBatch(java.util.List<CodePackageDO> packages) {
+    public void updateUnitsBatch(java.util.List<CodeUnitDO> units) {
+        if (units == null || units.isEmpty()) {
+            return;
+        }
+        
+        log.debug("批量更新单元开始: count={}", units.size());
+        
+        String updateCypher = """
+            UNWIND $units AS unit
+            MATCH (u:CodeUnit {id: unit.id})
+            SET u.name = unit.name,
+                u.qualifiedName = unit.qualifiedName,
+                u.language = unit.language,
+                u.filePath = unit.filePath,
+                u.startLine = unit.startLine,
+                u.endLine = unit.endLine,
+                u.unitType = unit.unitType,
+                u.modifiers = unit.modifiers,
+                u.isAbstract = unit.isAbstract,
+                u.packageId = unit.packageId
+            """;
+        
+        java.util.List<java.util.Map<String, Object>> updateParams = units.stream()
+            .map(this::unitToMap)
+            .collect(java.util.stream.Collectors.toList());
+        
+        try (Session session = neo4jDriver.session()) {
+            session.run(updateCypher, Values.parameters("units", updateParams));
+            log.info("批量更新单元成功: count={}", units.size());
+        } catch (Exception e) {
+            log.error("批量更新单元失败: count={}, error={}", units.size(), e.getMessage(), e);
+            throw new RuntimeException("批量更新单元失败", e);
+        }
+    }
+    
+    @Override
+    public void insertPackagesBatch(java.util.List<CodePackageDO> packages) {
         if (packages == null || packages.isEmpty()) {
             return;
         }
         
-        // 包通常数量很少，直接使用 MERGE
-        String cypher = """
+        log.debug("批量插入包开始: count={}", packages.size());
+        
+        String insertCypher = """
             UNWIND $packages AS pkg
-            MERGE (p:CodePackage {id: pkg.id})
+            CREATE (p:CodePackage {
+                id: pkg.id,
+                name: pkg.name,
+                qualifiedName: pkg.qualifiedName,
+                language: pkg.language,
+                filePath: pkg.filePath,
+                packagePath: pkg.packagePath
+            })
+            """;
+        
+        java.util.List<java.util.Map<String, Object>> params = packages.stream()
+            .map(this::packageToMap)
+            .collect(java.util.stream.Collectors.toList());
+        
+        try (Session session = neo4jDriver.session()) {
+            session.run(insertCypher, Values.parameters("packages", params));
+            log.info("批量插入包成功: count={}", packages.size());
+        } catch (Exception e) {
+            log.error("批量插入包失败: count={}, error={}", packages.size(), e.getMessage(), e);
+            throw new RuntimeException("批量插入包失败", e);
+        }
+    }
+    
+    @Override
+    public void updatePackagesBatch(java.util.List<CodePackageDO> packages) {
+        if (packages == null || packages.isEmpty()) {
+            return;
+        }
+        
+        log.debug("批量更新包开始: count={}", packages.size());
+        
+        String updateCypher = """
+            UNWIND $packages AS pkg
+            MATCH (p:CodePackage {id: pkg.id})
             SET p.name = pkg.name,
                 p.qualifiedName = pkg.qualifiedName,
                 p.language = pkg.language,
@@ -553,25 +574,27 @@ public class Neo4jCodeGraphRepository implements CodeGraphRepository {
             .collect(java.util.stream.Collectors.toList());
         
         try (Session session = neo4jDriver.session()) {
-            session.run(cypher, Values.parameters("packages", params));
-            log.debug("批量保存包: {} 个", packages.size());
+            session.run(updateCypher, Values.parameters("packages", params));
+            log.info("批量更新包成功: count={}", packages.size());
+        } catch (Exception e) {
+            log.error("批量更新包失败: count={}, error={}", packages.size(), e.getMessage(), e);
+            throw new RuntimeException("批量更新包失败", e);
         }
     }
     
     @Override
-    public void saveCallRelationshipsBatch(java.util.List<CallRelationshipDO> relationships) {
+    public void insertCallRelationshipsBatch(java.util.List<CallRelationshipDO> relationships) {
         if (relationships == null || relationships.isEmpty()) {
-            log.debug("批量保存调用关系: 列表为空，跳过");
             return;
         }
         
-        log.debug("批量保存调用关系开始: count={}", relationships.size());
+        log.debug("批量插入调用关系开始: count={}", relationships.size());
         
-        String cypher = """
+        String insertCypher = """
             UNWIND $relationships AS rel
             MATCH (from:CodeFunction {id: rel.fromFunctionId})
             MATCH (to:CodeFunction {id: rel.toFunctionId})
-            MERGE (from)-[r:CALLS]->(to)
+            CREATE (from)-[r:CALLS]->(to)
             SET r.id = rel.id,
                 r.lineNumber = rel.lineNumber,
                 r.callType = rel.callType,
@@ -583,13 +606,41 @@ public class Neo4jCodeGraphRepository implements CodeGraphRepository {
             .collect(java.util.stream.Collectors.toList());
         
         try (Session session = neo4jDriver.session()) {
-            session.run(cypher, Values.parameters("relationships", params));
-            log.info("批量保存调用关系成功: count={}", relationships.size());
+            session.run(insertCypher, Values.parameters("relationships", params));
+            log.info("批量插入调用关系成功: count={}", relationships.size());
         } catch (Exception e) {
-            log.error("批量保存调用关系失败: count={}, error={}, " +
-                      "可能原因: from/to 节点不存在（占位符节点未创建）", 
-                      relationships.size(), e.getMessage(), e);
-            throw new RuntimeException("批量保存调用关系失败", e);
+            log.error("批量插入调用关系失败: count={}, error={}", relationships.size(), e.getMessage(), e);
+            throw new RuntimeException("批量插入调用关系失败", e);
+        }
+    }
+    
+    @Override
+    public void updateCallRelationshipsBatch(java.util.List<CallRelationshipDO> relationships) {
+        if (relationships == null || relationships.isEmpty()) {
+            return;
+        }
+        
+        log.debug("批量更新调用关系开始: count={}", relationships.size());
+        
+        String updateCypher = """
+            UNWIND $relationships AS rel
+            MATCH (from:CodeFunction {id: rel.fromFunctionId})-[r:CALLS]->(to:CodeFunction {id: rel.toFunctionId})
+            SET r.id = rel.id,
+                r.lineNumber = rel.lineNumber,
+                r.callType = rel.callType,
+                r.language = rel.language
+            """;
+        
+        java.util.List<java.util.Map<String, Object>> params = relationships.stream()
+            .map(this::relationshipToMap)
+            .collect(java.util.stream.Collectors.toList());
+        
+        try (Session session = neo4jDriver.session()) {
+            session.run(updateCypher, Values.parameters("relationships", params));
+            log.info("批量更新调用关系成功: count={}", relationships.size());
+        } catch (Exception e) {
+            log.error("批量更新调用关系失败: count={}, error={}", relationships.size(), e.getMessage(), e);
+            throw new RuntimeException("批量更新调用关系失败", e);
         }
     }
     
