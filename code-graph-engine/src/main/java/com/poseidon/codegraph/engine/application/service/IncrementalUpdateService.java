@@ -1,7 +1,7 @@
 package com.poseidon.codegraph.engine.application.service;
 
 import com.poseidon.codegraph.engine.application.converter.CodeGraphConverter;
-import com.poseidon.codegraph.engine.application.repository.CodeGraphRepository;
+import com.poseidon.codegraph.engine.application.repository.*;
 import com.poseidon.codegraph.engine.domain.context.CodeGraphContext;
 import com.poseidon.codegraph.engine.domain.model.event.ChangeType;
 import com.poseidon.codegraph.engine.domain.service.CodeGraphService;
@@ -21,11 +21,21 @@ import java.util.stream.Collectors;
 public class IncrementalUpdateService {
     
     private final CodeGraphService codeGraphService;
-    private final CodeGraphRepository repository;
+    private final CodePackageRepository packageRepository;
+    private final CodeUnitRepository unitRepository;
+    private final CodeFunctionRepository functionRepository;
+    private final CodeRelationshipRepository relationshipRepository;
     
-    public IncrementalUpdateService(CodeGraphRepository repository) {
-        this.codeGraphService = new CodeGraphService();  // 直接使用领域服务
-        this.repository = repository;
+    public IncrementalUpdateService(
+            CodePackageRepository packageRepository,
+            CodeUnitRepository unitRepository,
+            CodeFunctionRepository functionRepository,
+            CodeRelationshipRepository relationshipRepository) {
+        this.codeGraphService = new CodeGraphService();
+        this.packageRepository = packageRepository;
+        this.unitRepository = unitRepository;
+        this.functionRepository = functionRepository;
+        this.relationshipRepository = relationshipRepository;
     }
     
     /**
@@ -133,68 +143,49 @@ public class IncrementalUpdateService {
         // ========== 查询函数 (Reader) ==========
         
         context.getReader().setFindWhoCallsMe(path -> 
-            repository.findWhoCallsMe(path)
+            relationshipRepository.findWhoCallsMe(path)
         );
         
         context.getReader().setFindUnitsByProjectFilePath(path -> 
-            repository.findUnitsByProjectFilePath(path).stream()
+            unitRepository.findUnitsByProjectFilePath(path).stream()
                 .map(CodeGraphConverter::toDomain)
                 .collect(Collectors.toList())
         );
         
         context.getReader().setFindFunctionsByProjectFilePath(path -> 
-            repository.findFunctionsByProjectFilePath(path).stream()
+            functionRepository.findFunctionsByProjectFilePath(path).stream()
                 .map(CodeGraphConverter::toDomain)
                 .collect(Collectors.toList())
         );
         
-        context.getReader().setFindFunctionByQualifiedName(qualifiedName -> 
-            repository.findFunctionByQualifiedName(qualifiedName)
-                .map(CodeGraphConverter::toDomain)
-        );
-        
         context.getReader().setFindExistingFunctionsByQualifiedNames(qualifiedNames -> 
-            repository.findExistingFunctionsByQualifiedNames(qualifiedNames)
+            functionRepository.findExistingFunctionsByQualifiedNames(qualifiedNames)
         );
         
         context.getReader().setFindExistingUnitsByQualifiedNames(qualifiedNames -> 
-            repository.findExistingUnitsByQualifiedNames(qualifiedNames)
+            unitRepository.findExistingUnitsByQualifiedNames(qualifiedNames)
         );
         
         context.getReader().setFindExistingPackagesByQualifiedNames(qualifiedNames -> 
-            repository.findExistingPackagesByQualifiedNames(qualifiedNames)
+            packageRepository.findExistingPackagesByQualifiedNames(qualifiedNames)
         );
         
         // ========== 修改函数 (Writer) ==========
         
         context.getWriter().setDeleteFileOutgoingCalls(path -> 
-            repository.deleteFileOutgoingCalls(path)
+            relationshipRepository.deleteFileOutgoingCalls(path)
         );
         
         context.getWriter().setDeleteNode(nodeId -> 
-            repository.deleteNode(nodeId)
-        );
-        
-        context.getWriter().setSavePackage(pkg -> 
-            repository.savePackage(CodeGraphConverter.toDO(pkg))
-        );
-        
-        context.getWriter().setSaveUnit(unit -> 
-            repository.saveUnit(CodeGraphConverter.toDO(unit))
-        );
-        
-        context.getWriter().setSaveFunction(function -> 
-            repository.saveFunction(CodeGraphConverter.toDO(function))
-        );
-        
-        context.getWriter().setSaveRelationship(relationship -> 
-            repository.saveRelationship(CodeGraphConverter.toDO(relationship))
+            // 使用 FunctionRepository 的删除方法（实际上 Neo4j 实现是通用的）
+            // 或者使用 UnitRepository，效果一样。
+            functionRepository.deleteById(nodeId)
         );
         
         // ========== 批量插入函数 ==========
         
         context.getWriter().setInsertPackagesBatch(packages -> 
-            repository.insertPackagesBatch(
+            packageRepository.insertPackagesBatch(
                 packages.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())
@@ -202,7 +193,7 @@ public class IncrementalUpdateService {
         );
         
         context.getWriter().setInsertUnitsBatch(units -> 
-            repository.insertUnitsBatch(
+            unitRepository.insertUnitsBatch(
                 units.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())
@@ -210,7 +201,7 @@ public class IncrementalUpdateService {
         );
         
         context.getWriter().setInsertFunctionsBatch(functions -> 
-            repository.insertFunctionsBatch(
+            functionRepository.insertFunctionsBatch(
                 functions.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())
@@ -218,7 +209,7 @@ public class IncrementalUpdateService {
         );
         
         context.getWriter().setInsertRelationshipsBatch(relationships -> 
-            repository.insertRelationshipsBatch(
+            relationshipRepository.insertRelationshipsBatch(
                 relationships.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())
@@ -228,7 +219,7 @@ public class IncrementalUpdateService {
         // ========== 批量更新函数 ==========
         
         context.getWriter().setUpdatePackagesBatch(packages -> 
-            repository.updatePackagesBatch(
+            packageRepository.updatePackagesBatch(
                 packages.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())
@@ -236,7 +227,7 @@ public class IncrementalUpdateService {
         );
         
         context.getWriter().setUpdateUnitsBatch(units -> 
-            repository.updateUnitsBatch(
+            unitRepository.updateUnitsBatch(
                 units.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())
@@ -244,16 +235,8 @@ public class IncrementalUpdateService {
         );
         
         context.getWriter().setUpdateFunctionsBatch(functions -> 
-            repository.updateFunctionsBatch(
+            functionRepository.updateFunctionsBatch(
                 functions.stream()
-                    .map(CodeGraphConverter::toDO)
-                    .collect(Collectors.toList())
-            )
-        );
-        
-        context.getWriter().setUpdateRelationshipsBatch(relationships -> 
-            repository.updateRelationshipsBatch(
-                relationships.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())
             )

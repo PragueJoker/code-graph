@@ -34,12 +34,6 @@ public class GraphReader {
     private Function<String, List<CodeFunction>> findFunctionsByProjectFilePath;
     
     /**
-     * 根据全限定名查找函数
-     * Input: qualifiedName -> Output: Optional<CodeFunction>
-     */
-    private Function<String, Optional<CodeFunction>> findFunctionByQualifiedName;
-    
-    /**
      * 批量查询函数是否存在
      * Input: List<qualifiedName> -> Output: Set<existingQualifiedName>
      */

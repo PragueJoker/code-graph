@@ -29,28 +29,6 @@ public class GraphWriter {
      */
     private Consumer<String> deleteNode;
     
-    // ========== 保存函数 ==========
-    
-    /**
-     * 保存代码包
-     */
-    private Consumer<CodePackage> savePackage;
-    
-    /**
-     * 保存代码单元
-     */
-    private Consumer<CodeUnit> saveUnit;
-    
-    /**
-     * 保存函数
-     */
-    private Consumer<CodeFunction> saveFunction;
-    
-    /**
-     * 保存关系
-     */
-    private Consumer<CodeRelationship> saveRelationship;
-    
     // ========== 批量插入函数 ==========
     
     /**
@@ -89,9 +67,4 @@ public class GraphWriter {
      * 批量更新包（纯数据库操作）
      */
     private Consumer<java.util.List<CodePackage>> updatePackagesBatch;
-    
-    /**
-     * 批量更新关系（包括调用关系、结构关系等）（纯数据库操作）
-     */
-    private Consumer<java.util.List<CodeRelationship>> updateRelationshipsBatch;
 }
