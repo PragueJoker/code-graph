@@ -26,6 +26,12 @@ public class RemovedSourceProcessor extends AbstractChangeProcessor {
         
         // 步骤 1：查找谁依赖我
         List<String> dependentFiles = context.getReader().getFindWhoCallsMe().apply(projectFilePath);
+        
+        // 排除自己，防止级联更新重新创建已被删除的节点（因为自引用导致 CascadeUpdateProcessor 重建本节点）
+        if (dependentFiles != null) {
+            dependentFiles.remove(projectFilePath);
+        }
+        
         log.debug("找到依赖文件: {} 个", dependentFiles.size());
         
         // 步骤 2：查找该文件的所有节点

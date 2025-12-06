@@ -30,6 +30,12 @@ public class ModifiedSourceProcessor extends AbstractChangeProcessor {
         
         // 步骤 1：查找谁依赖我（入边）
         List<String> dependentFiles = context.getReader().getFindWhoCallsMe().apply(oldProjectFilePath);
+        
+        // 排除自己，避免不必要的自我级联更新（自身更新由当前 Processor 处理）
+        if (dependentFiles != null) {
+            dependentFiles.remove(oldProjectFilePath);
+        }
+        
         log.debug("找到依赖文件: {} 个", dependentFiles.size());
         
         // 步骤 2：触发级联变更（依赖我的文件）
