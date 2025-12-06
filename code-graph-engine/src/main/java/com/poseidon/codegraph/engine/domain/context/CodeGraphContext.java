@@ -46,6 +46,16 @@ public class CodeGraphContext {
     private String projectFilePath;
     
     /**
+     * Git 仓库 URL
+     */
+    private String gitRepoUrl;
+    
+    /**
+     * Git 分支名
+     */
+    private String gitBranch;
+    
+    /**
      * classpath 条目
      */
     private String[] classpathEntries;

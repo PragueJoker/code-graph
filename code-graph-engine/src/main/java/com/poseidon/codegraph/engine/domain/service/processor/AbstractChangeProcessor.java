@@ -10,8 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 抽象代码变更处理器
@@ -34,7 +36,13 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
     }
     
     protected CodeGraph parseFile(CodeGraphContext context, String absoluteFilePath, String projectFilePath) {
-        return createParser(context).parse(absoluteFilePath, context.getProjectName(), projectFilePath);
+        return createParser(context).parse(
+            absoluteFilePath, 
+            context.getProjectName(), 
+            projectFilePath,
+            context.getGitRepoUrl(),
+            context.getGitBranch()
+        );
     }
     
     protected void saveNodes(CodeGraph graph, CodeGraphContext context) {
@@ -271,28 +279,43 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
         
         log.info("开始处理级联变更: dependentCount={}", dependentFiles.size());
         
-        for (String depProjectFile : dependentFiles) {
+        // 查询依赖文件的 Git 元信息
+        List<FileMetadata> dependentFilesWithMeta = context.getReader().getFindWhoCallsMeWithMeta() != null
+            ? context.getReader().getFindWhoCallsMeWithMeta().apply(context.getOldProjectFilePath())
+            : new ArrayList<>();
+        
+        // 过滤掉不需要级联的文件
+        List<FileMetadata> filteredMeta = dependentFilesWithMeta.stream()
+            .filter(meta -> dependentFiles.contains(meta.getProjectFilePath()))
+            .collect(Collectors.toList());
+        
+        for (FileMetadata fileMeta : filteredMeta) {
             if (context.getSender() != null && context.getSender().getSendEvent() != null) {
                 CodeChangeEvent event = new CodeChangeEvent();
                 event.setEventId(UUID.randomUUID().toString());
                 event.setProjectName(context.getProjectName());
                 
                 // 级联变更无法获取绝对路径，设为 null
-                // 依赖 IncrementalUpdateService 的兜底逻辑进行推导
+                // 后续通过 Git 信息拉取代码获得绝对路径
                 event.setAbsoluteFilePath(null);
+                
+                // 设置 Git 信息
+                event.setGitRepoUrl(fileMeta.getGitRepoUrl());
+                event.setGitBranch(fileMeta.getGitBranch());
                 
                 event.setClasspathEntries(context.getClasspathEntries());
                 event.setSourcepathEntries(context.getSourcepathEntries());
-                event.setOldFileIdentifier(depProjectFile);
+                event.setOldFileIdentifier(fileMeta.getProjectFilePath());
                 event.setChangeType(ChangeType.CASCADE_UPDATE);
                 event.setLanguage("java");
                 event.setTimestamp(LocalDateTime.now());
                 event.setReason("Cascade update from " + context.getOldProjectFilePath());
                 
                 context.getSender().getSendEvent().accept(event);
-                log.debug("已发送级联变更事件: file={}", depProjectFile);
+                log.debug("已发送级联变更事件: file={}, gitRepo={}, gitBranch={}", 
+                    fileMeta.getProjectFilePath(), fileMeta.getGitRepoUrl(), fileMeta.getGitBranch());
             } else {
-                log.warn("未配置事件发送器，忽略级联变更: {}", depProjectFile);
+                log.warn("未配置事件发送器，忽略级联变更: {}", fileMeta.getProjectFilePath());
             }
         }
     }

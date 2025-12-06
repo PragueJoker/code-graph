@@ -90,13 +90,20 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
     }
     
     @Override
-    public CodeGraph parse(String absoluteFilePath, String projectName, String projectFilePath) {
-        log.info("开始解析代码图谱: absoluteFile={}, projectFile={}", absoluteFilePath, projectFilePath);
+    @Override
+    public CodeGraph parse(String absoluteFilePath, String projectName, String projectFilePath,
+                          String gitRepoUrl, String gitBranch) {
+        log.info("开始解析代码图谱: absoluteFile={}, projectFile={}, git={}/{}", 
+                absoluteFilePath, projectFilePath, gitRepoUrl, gitBranch);
         CodeGraph graph = new CodeGraph();
         CompilationUnit cu = createAST(absoluteFilePath);
         
         List<CodePackage> packages = parsePackages(cu, absoluteFilePath, projectName, projectFilePath);
-        packages.forEach(graph::addPackage);
+        packages.forEach(pkg -> {
+            pkg.setGitRepoUrl(gitRepoUrl);
+            pkg.setGitBranch(gitBranch);
+            graph.addPackage(pkg);
+        });
         log.debug("解析 Package 完成: file={}, packageCount={}", projectFilePath, packages.size());
         
         List<CodeUnit> units = parseUnits(cu, absoluteFilePath, projectName, projectFilePath);
@@ -107,8 +114,15 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
             if (packageId != null) {
                 unit.setPackageId(packageId);
             }
+            unit.setGitRepoUrl(gitRepoUrl);
+            unit.setGitBranch(gitBranch);
             graph.addUnit(unit);
-            unit.getFunctions().forEach(graph::addFunction);
+            
+            for (CodeFunction function : unit.getFunctions()) {
+                function.setGitRepoUrl(gitRepoUrl);
+                function.setGitBranch(gitBranch);
+                graph.addFunction(function);
+            }
             functionCount += unit.getFunctions().size();
         }
         log.info("解析 Units 和 Functions 完成: file={}, unitCount={}, functionCount={}", 

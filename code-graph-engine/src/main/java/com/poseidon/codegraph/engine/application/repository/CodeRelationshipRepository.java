@@ -1,6 +1,7 @@
 package com.poseidon.codegraph.engine.application.repository;
 
 import com.poseidon.codegraph.engine.application.model.CodeRelationshipDO;
+import com.poseidon.codegraph.engine.application.model.FileMetaInfo;
 
 import java.util.List;
 
@@ -16,6 +17,15 @@ public interface CodeRelationshipRepository {
      * @return 依赖该文件的文件路径列表
      */
     List<String> findWhoCallsMe(String targetProjectFilePath);
+
+    /**
+     * 查找谁依赖我（带 Git 元信息）
+     * 用于级联变更时获取依赖文件的完整信息
+     * 
+     * @param targetProjectFilePath 目标文件路径
+     * @return 依赖该文件的文件元信息列表（包含 Git 信息）
+     */
+    List<FileMetaInfo> findWhoCallsMeWithMeta(String targetProjectFilePath);
 
     /**
      * 删除文件的出边（该文件发起的调用）

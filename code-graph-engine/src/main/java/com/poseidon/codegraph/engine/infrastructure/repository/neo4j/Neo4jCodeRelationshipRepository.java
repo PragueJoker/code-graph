@@ -1,9 +1,11 @@
 package com.poseidon.codegraph.engine.infrastructure.repository.neo4j;
 
 import com.poseidon.codegraph.engine.application.model.CodeRelationshipDO;
+import com.poseidon.codegraph.engine.application.model.FileMetaInfo;
 import com.poseidon.codegraph.engine.application.repository.CodeRelationshipRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.neo4j.driver.Driver;
+import org.neo4j.driver.Record;
 import org.neo4j.driver.Session;
 import org.neo4j.driver.Values;
 import org.springframework.stereotype.Repository;
@@ -45,6 +47,40 @@ public class Neo4jCodeRelationshipRepository implements CodeRelationshipReposito
             log.error("查询依赖文件失败: targetFile={}, error={}", targetProjectFilePath, e.getMessage(), e);
             throw new RuntimeException("查询依赖文件失败: " + targetProjectFilePath, e);
         }
+    }
+
+    @Override
+    public List<FileMetaInfo> findWhoCallsMeWithMeta(String targetProjectFilePath) {
+        log.debug("查询依赖文件（带 Git 元信息）: targetFile={}", targetProjectFilePath);
+        String cypher = """
+            MATCH (caller:CodeFunction)-[:CALLS]->(callee:CodeFunction)
+            WHERE callee.projectFilePath = $targetProjectFilePath
+            RETURN DISTINCT 
+                caller.projectFilePath AS projectFilePath,
+                caller.gitRepoUrl AS gitRepoUrl,
+                caller.gitBranch AS gitBranch
+            """;
+        
+        try (Session session = neo4jDriver.session()) {
+            List<FileMetaInfo> result = session.run(cypher, Values.parameters("targetProjectFilePath", targetProjectFilePath))
+                .stream()
+                .map(this::recordToFileMetaInfo)
+                .distinct()
+                .collect(Collectors.toList());
+            log.debug("查询依赖文件完成（带 Git 元信息）: targetFile={}, dependentCount={}", targetProjectFilePath, result.size());
+            return result;
+        } catch (Exception e) {
+            log.error("查询依赖文件失败（带 Git 元信息）: targetFile={}, error={}", targetProjectFilePath, e.getMessage(), e);
+            throw new RuntimeException("查询依赖文件失败（带 Git 元信息）: " + targetProjectFilePath, e);
+        }
+    }
+
+    private FileMetaInfo recordToFileMetaInfo(Record record) {
+        FileMetaInfo meta = new FileMetaInfo();
+        meta.setProjectFilePath(record.get("projectFilePath").asString(null));
+        meta.setGitRepoUrl(record.get("gitRepoUrl").asString(null));
+        meta.setGitBranch(record.get("gitBranch").asString(null));
+        return meta;
     }
 
     @Override

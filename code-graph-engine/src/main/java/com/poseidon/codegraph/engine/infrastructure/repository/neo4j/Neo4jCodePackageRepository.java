@@ -61,6 +61,8 @@ public class Neo4jCodePackageRepository implements CodePackageRepository {
                 qualifiedName: pkg.qualifiedName,
                 language: pkg.language,
                 projectFilePath: pkg.projectFilePath,
+                gitRepoUrl: pkg.gitRepoUrl,
+                gitBranch: pkg.gitBranch,
                 packagePath: pkg.packagePath
             })
             """;
@@ -93,6 +95,8 @@ public class Neo4jCodePackageRepository implements CodePackageRepository {
                 p.qualifiedName = pkg.qualifiedName,
                 p.language = pkg.language,
                 p.projectFilePath = pkg.projectFilePath,
+                p.gitRepoUrl = pkg.gitRepoUrl,
+                p.gitBranch = pkg.gitBranch,
                 p.packagePath = pkg.packagePath
             """;
         
@@ -116,6 +120,8 @@ public class Neo4jCodePackageRepository implements CodePackageRepository {
         map.put("qualifiedName", pkg.getQualifiedName());
         map.put("language", pkg.getLanguage());
         map.put("projectFilePath", pkg.getProjectFilePath());
+        map.put("gitRepoUrl", pkg.getGitRepoUrl());
+        map.put("gitBranch", pkg.getGitBranch());
         map.put("packagePath", pkg.getPackagePath());
         return map;
     }

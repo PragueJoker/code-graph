@@ -78,6 +78,8 @@ public class Neo4jCodeUnitRepository implements CodeUnitRepository {
                 qualifiedName: unit.qualifiedName,
                 language: unit.language,
                 projectFilePath: unit.projectFilePath,
+                gitRepoUrl: unit.gitRepoUrl,
+                gitBranch: unit.gitBranch,
                 startLine: unit.startLine,
                 endLine: unit.endLine,
                 unitType: unit.unitType,
@@ -115,6 +117,8 @@ public class Neo4jCodeUnitRepository implements CodeUnitRepository {
                 u.qualifiedName = unit.qualifiedName,
                 u.language = unit.language,
                 u.projectFilePath = unit.projectFilePath,
+                u.gitRepoUrl = unit.gitRepoUrl,
+                u.gitBranch = unit.gitBranch,
                 u.startLine = unit.startLine,
                 u.endLine = unit.endLine,
                 u.unitType = unit.unitType,
@@ -157,6 +161,8 @@ public class Neo4jCodeUnitRepository implements CodeUnitRepository {
         unit.setQualifiedName((String) map.get("qualifiedName"));
         unit.setLanguage((String) map.get("language"));
         unit.setProjectFilePath((String) map.get("projectFilePath"));
+        unit.setGitRepoUrl((String) map.get("gitRepoUrl"));
+        unit.setGitBranch((String) map.get("gitBranch"));
         unit.setStartLine(map.get("startLine") != null ? ((Number) map.get("startLine")).intValue() : null);
         unit.setEndLine(map.get("endLine") != null ? ((Number) map.get("endLine")).intValue() : null);
         unit.setUnitType((String) map.get("unitType"));
@@ -173,6 +179,8 @@ public class Neo4jCodeUnitRepository implements CodeUnitRepository {
         map.put("qualifiedName", unit.getQualifiedName());
         map.put("language", unit.getLanguage());
         map.put("projectFilePath", unit.getProjectFilePath());
+        map.put("gitRepoUrl", unit.getGitRepoUrl());
+        map.put("gitBranch", unit.getGitBranch());
         map.put("startLine", unit.getStartLine());
         map.put("endLine", unit.getEndLine());
         map.put("unitType", unit.getUnitType());

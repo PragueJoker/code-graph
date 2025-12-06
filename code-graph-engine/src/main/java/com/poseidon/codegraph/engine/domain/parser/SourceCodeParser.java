@@ -19,9 +19,12 @@ public interface SourceCodeParser {
      * @param absoluteFilePath 文件绝对路径（用于读取）
      * @param projectName 项目名称（用于生成唯一 ID）
      * @param projectFilePath 项目相对路径（用于节点属性）
+     * @param gitRepoUrl Git 仓库 URL
+     * @param gitBranch Git 分支名
      * @return 解析出的代码图谱片段
      */
-    CodeGraph parse(String absoluteFilePath, String projectName, String projectFilePath);
+    CodeGraph parse(String absoluteFilePath, String projectName, String projectFilePath, 
+                    String gitRepoUrl, String gitBranch);
 
     /**
      * 仅解析包（package 声明）

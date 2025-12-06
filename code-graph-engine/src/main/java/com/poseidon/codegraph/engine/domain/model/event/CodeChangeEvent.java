@@ -25,6 +25,16 @@ public class CodeChangeEvent {
     private String absoluteFilePath;
     
     /**
+     * Git 仓库 URL
+     */
+    private String gitRepoUrl;
+    
+    /**
+     * Git 分支名
+     */
+    private String gitBranch;
+    
+    /**
      * classpath 条目（依赖的 jar 包路径）
      */
     private String[] classpathEntries;

@@ -12,6 +12,8 @@ public class CodePackageDO {
     private String qualifiedName;
     private String language;
     private String projectFilePath;
+    private String gitRepoUrl;
+    private String gitBranch;
     private String packagePath;
 }
 

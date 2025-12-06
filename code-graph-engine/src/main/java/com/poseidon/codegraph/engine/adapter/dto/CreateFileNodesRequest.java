@@ -26,6 +26,18 @@ public class CreateFileNodesRequest {
     private String projectFilePath;
     
     /**
+     * Git 仓库 URL
+     * 例如：https://github.com/company/project.git
+     */
+    private String gitRepoUrl;
+    
+    /**
+     * Git 分支名
+     * 例如：main, develop
+     */
+    private String gitBranch;
+    
+    /**
      * Classpath 条目列表（JAR 文件路径、类目录路径等）
      */
     private List<String> classpathEntries;

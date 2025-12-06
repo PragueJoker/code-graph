@@ -42,9 +42,10 @@ public class IncrementalUpdateService {
      * 处理文件变更（通用入口）
      */
     public void handleFileChange(String projectName, String absoluteFilePath, String projectFilePath,
+                                 String gitRepoUrl, String gitBranch,
                                  String[] classpathEntries, String[] sourcepathEntries,
                                  boolean isCascade) {
-        CodeGraphContext context = buildContext(projectName, absoluteFilePath, projectFilePath, classpathEntries, sourcepathEntries);
+        CodeGraphContext context = buildContext(projectName, absoluteFilePath, projectFilePath, gitRepoUrl, gitBranch, classpathEntries, sourcepathEntries);
         
         if (isCascade) {
             context.setChangeType(ChangeType.CASCADE_UPDATE);
@@ -67,12 +68,13 @@ public class IncrementalUpdateService {
      * 处理文件新增
      */
     public void handleFileAdded(String projectName, String absoluteFilePath, String projectFilePath,
+                                String gitRepoUrl, String gitBranch,
                                 String[] classpathEntries, String[] sourcepathEntries) {
         log.info("处理文件新增: absolutePath={}, projectPath={}, classpathCount={}", absoluteFilePath, projectFilePath,
                  classpathEntries != null ? classpathEntries.length : 0);
         
         try {
-            CodeGraphContext context = buildContext(projectName, absoluteFilePath, projectFilePath, classpathEntries, sourcepathEntries);
+            CodeGraphContext context = buildContext(projectName, absoluteFilePath, projectFilePath, gitRepoUrl, gitBranch, classpathEntries, sourcepathEntries);
             context.setChangeType(ChangeType.SOURCE_ADDED);
             context.setOldProjectFilePath(null);
             context.setNewProjectFilePath(projectFilePath);
@@ -89,11 +91,12 @@ public class IncrementalUpdateService {
      * 处理文件删除
      */
     public void handleFileDeleted(String projectName, String absoluteFilePath, String projectFilePath,
+                                  String gitRepoUrl, String gitBranch,
                                   String[] classpathEntries, String[] sourcepathEntries) {
         log.info("处理文件删除: absolutePath={}, projectPath={}", absoluteFilePath, projectFilePath);
         
         try {
-            CodeGraphContext context = buildContext(projectName, absoluteFilePath, projectFilePath, classpathEntries, sourcepathEntries);
+            CodeGraphContext context = buildContext(projectName, absoluteFilePath, projectFilePath, gitRepoUrl, gitBranch, classpathEntries, sourcepathEntries);
             context.setChangeType(ChangeType.SOURCE_DELETED);
             context.setOldProjectFilePath(projectFilePath);
             context.setNewProjectFilePath(null);
@@ -110,12 +113,13 @@ public class IncrementalUpdateService {
      * 处理文件修改
      */
     public void handleFileModified(String projectName, String absoluteFilePath, String projectFilePath,
+                                   String gitRepoUrl, String gitBranch,
                                    String[] classpathEntries, String[] sourcepathEntries) {
         log.info("处理文件修改: absolutePath={}, projectPath={}, classpathCount={}", absoluteFilePath, projectFilePath,
                  classpathEntries != null ? classpathEntries.length : 0);
         
         try {
-            CodeGraphContext context = buildContext(projectName, absoluteFilePath, projectFilePath, classpathEntries, sourcepathEntries);
+            CodeGraphContext context = buildContext(projectName, absoluteFilePath, projectFilePath, gitRepoUrl, gitBranch, classpathEntries, sourcepathEntries);
             context.setChangeType(ChangeType.SOURCE_MODIFIED);
             context.setOldProjectFilePath(projectFilePath);
             context.setNewProjectFilePath(projectFilePath);
@@ -132,11 +136,14 @@ public class IncrementalUpdateService {
      * 构建上下文（注入 Repository 实现）
      */
     private CodeGraphContext buildContext(String projectName, String absoluteFilePath, String projectFilePath,
+                                          String gitRepoUrl, String gitBranch,
                                           String[] classpathEntries, String[] sourcepathEntries) {
         CodeGraphContext context = new CodeGraphContext();
         context.setProjectName(projectName);
         context.setAbsoluteFilePath(absoluteFilePath);
         context.setProjectFilePath(projectFilePath);
+        context.setGitRepoUrl(gitRepoUrl);
+        context.setGitBranch(gitBranch);
         context.setClasspathEntries(classpathEntries);
         context.setSourcepathEntries(sourcepathEntries);
         
@@ -144,6 +151,12 @@ public class IncrementalUpdateService {
         
         context.getReader().setFindWhoCallsMe(path -> 
             relationshipRepository.findWhoCallsMe(path)
+        );
+        
+        context.getReader().setFindWhoCallsMeWithMeta(path -> 
+            relationshipRepository.findWhoCallsMeWithMeta(path).stream()
+                .map(this::fileMetaInfoToMetadata)
+                .collect(Collectors.toList())
         );
         
         context.getReader().setFindUnitsByProjectFilePath(path -> 
@@ -251,6 +264,8 @@ public class IncrementalUpdateService {
                 event.getProjectName(),
                 event.getAbsoluteFilePath(),
                 event.getOldFileIdentifier(), // 级联变更的目标文件
+                event.getGitRepoUrl(),
+                event.getGitBranch(),
                 event.getClasspathEntries(),
                 event.getSourcepathEntries(),
                 true // isCascade = true
@@ -258,5 +273,18 @@ public class IncrementalUpdateService {
         });
         
         return context;
+    }
+    
+    /**
+     * 将应用层的 FileMetaInfo 转换为领域层的 FileMetadata
+     */
+    private com.poseidon.codegraph.engine.domain.model.FileMetadata fileMetaInfoToMetadata(
+            com.poseidon.codegraph.engine.application.model.FileMetaInfo metaInfo) {
+        com.poseidon.codegraph.engine.domain.model.FileMetadata metadata = 
+            new com.poseidon.codegraph.engine.domain.model.FileMetadata();
+        metadata.setProjectFilePath(metaInfo.getProjectFilePath());
+        metadata.setGitRepoUrl(metaInfo.getGitRepoUrl());
+        metadata.setGitBranch(metaInfo.getGitBranch());
+        return metadata;
     }
 }

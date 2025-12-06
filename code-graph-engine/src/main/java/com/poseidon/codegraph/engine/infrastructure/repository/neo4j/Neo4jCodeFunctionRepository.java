@@ -78,6 +78,8 @@ public class Neo4jCodeFunctionRepository implements CodeFunctionRepository {
                 qualifiedName: func.qualifiedName,
                 language: func.language,
                 projectFilePath: func.projectFilePath,
+                gitRepoUrl: func.gitRepoUrl,
+                gitBranch: func.gitBranch,
                 startLine: func.startLine,
                 endLine: func.endLine,
                 signature: func.signature,
@@ -118,6 +120,8 @@ public class Neo4jCodeFunctionRepository implements CodeFunctionRepository {
                 f.qualifiedName = func.qualifiedName,
                 f.language = func.language,
                 f.projectFilePath = func.projectFilePath,
+                f.gitRepoUrl = func.gitRepoUrl,
+                f.gitBranch = func.gitBranch,
                 f.startLine = func.startLine,
                 f.endLine = func.endLine,
                 f.signature = func.signature,
@@ -163,6 +167,8 @@ public class Neo4jCodeFunctionRepository implements CodeFunctionRepository {
         function.setQualifiedName((String) map.get("qualifiedName"));
         function.setLanguage((String) map.get("language"));
         function.setProjectFilePath((String) map.get("projectFilePath"));
+        function.setGitRepoUrl((String) map.get("gitRepoUrl"));
+        function.setGitBranch((String) map.get("gitBranch"));
         function.setStartLine(map.get("startLine") != null ? ((Number) map.get("startLine")).intValue() : null);
         function.setEndLine(map.get("endLine") != null ? ((Number) map.get("endLine")).intValue() : null);
         function.setSignature((String) map.get("signature"));
@@ -182,6 +188,8 @@ public class Neo4jCodeFunctionRepository implements CodeFunctionRepository {
         map.put("qualifiedName", function.getQualifiedName());
         map.put("language", function.getLanguage());
         map.put("projectFilePath", function.getProjectFilePath());
+        map.put("gitRepoUrl", function.getGitRepoUrl());
+        map.put("gitBranch", function.getGitBranch());
         map.put("startLine", function.getStartLine());
         map.put("endLine", function.getEndLine());
         map.put("signature", function.getSignature());

@@ -36,6 +36,19 @@ public abstract class CodeNode {
     private String projectFilePath;
     
     /**
+     * Git 仓库 URL
+     * 例如：https://github.com/company/project.git
+     * 用于级联变更时从远程拉取代码
+     */
+    private String gitRepoUrl;
+    
+    /**
+     * Git 分支名
+     * 例如：main, develop, feature/xxx
+     */
+    private String gitBranch;
+    
+    /**
      * 起始行号
      */
     private Integer startLine;

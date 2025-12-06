@@ -13,6 +13,8 @@ public class CodeUnitDO {
     private String qualifiedName;
     private String language;
     private String projectFilePath;
+    private String gitRepoUrl;
+    private String gitBranch;
     private Integer startLine;
     private Integer endLine;
     private String unitType;

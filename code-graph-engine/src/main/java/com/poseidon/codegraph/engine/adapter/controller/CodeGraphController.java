@@ -63,6 +63,8 @@ public class CodeGraphController {
                 request.getProjectName(),
                 request.getAbsoluteFilePath(),
                 request.getProjectFilePath(),
+                request.getGitRepoUrl(),
+                request.getGitBranch(),
                 classpathEntries,
                 sourcepathEntries
             );
@@ -110,6 +112,8 @@ public class CodeGraphController {
                 request.getProjectName(),
                 request.getAbsoluteFilePath(),
                 request.getProjectFilePath(),
+                request.getGitRepoUrl(),
+                request.getGitBranch(),
                 classpathEntries,
                 sourcepathEntries
             );
@@ -154,6 +158,8 @@ public class CodeGraphController {
                 request.getProjectName(),
                 request.getAbsoluteFilePath(), // 可能为 null，视情况而定
                 request.getProjectFilePath(),
+                request.getGitRepoUrl(),
+                request.getGitBranch(),
                 classpathEntries,
                 sourcepathEntries
             );

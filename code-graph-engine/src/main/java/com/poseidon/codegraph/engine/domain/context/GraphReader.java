@@ -2,6 +2,7 @@ package com.poseidon.codegraph.engine.domain.context;
 
 import com.poseidon.codegraph.engine.domain.model.CodeFunction;
 import com.poseidon.codegraph.engine.domain.model.CodeUnit;
+import com.poseidon.codegraph.engine.domain.model.FileMetadata;
 import lombok.Data;
 
 import java.util.List;
@@ -20,6 +21,12 @@ public class GraphReader {
      * Input: projectFilePath -> Output: List<dependentProjectFilePath>
      */
     private Function<String, List<String>> findWhoCallsMe;
+    
+    /**
+     * 查找谁依赖我（带 Git 元信息）
+     * Input: projectFilePath -> Output: List<FileMetadata>
+     */
+    private Function<String, List<FileMetadata>> findWhoCallsMeWithMeta;
     
     /**
      * 查找文件的所有代码单元
