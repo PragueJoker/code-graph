@@ -18,11 +18,13 @@ public class NewSourceProcessor extends AbstractChangeProcessor {
     
     @Override
     public void handle(CodeGraphContext context) {
-        String filePath = context.getNewFilePath();
-        log.info("处理新增文件: {}", filePath);
+        String projectFilePath = context.getNewProjectFilePath();
+        String absoluteFilePath = context.getAbsoluteFilePath();
+        
+        log.info("处理新增文件: {}", projectFilePath);
         
         // 步骤 1：解析文件
-        CodeGraph graph = parseFile(context, filePath);
+        CodeGraph graph = parseFile(context, absoluteFilePath, projectFilePath);
         log.debug("解析完成: {} 个类, {} 个方法", graph.getUnitsAsList().size(), graph.getFunctionsAsList().size());
         
         // 步骤 2：保存节点
@@ -30,8 +32,7 @@ public class NewSourceProcessor extends AbstractChangeProcessor {
         log.debug("保存节点完成");
         
         // 步骤 3：建立调用关系
-        int relationshipCount = rebuildFileCallRelationships(context, filePath, graph);
+        int relationshipCount = rebuildFileCallRelationships(context, absoluteFilePath, projectFilePath, graph);
         log.debug("建立调用关系: {} 条", relationshipCount);
     }
 }
-

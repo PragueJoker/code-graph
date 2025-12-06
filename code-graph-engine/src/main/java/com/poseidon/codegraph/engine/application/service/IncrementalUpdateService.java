@@ -31,18 +31,23 @@ public class IncrementalUpdateService {
     /**
      * 处理文件变更（通用入口）
      */
-    public void handleFileChange(String projectRoot, String filePath, 
-                                              String[] classpathEntries, String[] sourcepathEntries,
-                                              boolean isCascade) {
-        CodeGraphContext context = buildContext(projectRoot, classpathEntries, sourcepathEntries);
+    public void handleFileChange(String projectName, String absoluteFilePath, String projectFilePath,
+                                 String[] classpathEntries, String[] sourcepathEntries,
+                                 boolean isCascade) {
+        CodeGraphContext context = buildContext(projectName, absoluteFilePath, projectFilePath, classpathEntries, sourcepathEntries);
         
         if (isCascade) {
             context.setChangeType(ChangeType.CASCADE_UPDATE);
-            context.setOldFilePath(filePath);
+            // 级联更新时，传入的 projectFilePath 是触发变更的文件（可能是旧文件）
+            context.setOldProjectFilePath(projectFilePath);
+            // 级联变更通常是由于其他文件变更导致的，当前文件本身可能没有位置变化，所以 NewProjectFilePath 也可以设为 projectFilePath
+            // 但具体逻辑取决于级联更新的处理方式，这里暂时只设置 OldProjectFilePath 作为标识
         } else {
-            context.setChangeType(ChangeType.SOURCE_MODIFIED); // 默认为修改，或者需要更细粒度的入参
-            context.setOldFilePath(filePath);
-            context.setNewFilePath(filePath);
+            // 默认视为修改，或者需要调用方明确传入 ChangeType
+            // 但在此简化方法中，暂且设为 MODIFIED，如果是新增/删除应该走专用方法
+            context.setChangeType(ChangeType.SOURCE_MODIFIED); 
+            context.setOldProjectFilePath(projectFilePath);
+            context.setNewProjectFilePath(projectFilePath);
         }
         
         codeGraphService.handle(context);
@@ -51,91 +56,94 @@ public class IncrementalUpdateService {
     /**
      * 处理文件新增
      */
-    public void handleFileAdded(String projectRoot, String filePath,
-                                             String[] classpathEntries, String[] sourcepathEntries) {
-        log.info("处理文件新增: file={}, classpathCount={}", filePath, 
+    public void handleFileAdded(String projectName, String absoluteFilePath, String projectFilePath,
+                                String[] classpathEntries, String[] sourcepathEntries) {
+        log.info("处理文件新增: absolutePath={}, projectPath={}, classpathCount={}", absoluteFilePath, projectFilePath,
                  classpathEntries != null ? classpathEntries.length : 0);
         
         try {
-            CodeGraphContext context = buildContext(projectRoot, classpathEntries, sourcepathEntries);
+            CodeGraphContext context = buildContext(projectName, absoluteFilePath, projectFilePath, classpathEntries, sourcepathEntries);
             context.setChangeType(ChangeType.SOURCE_ADDED);
-            context.setOldFilePath(null);
-            context.setNewFilePath(filePath);
+            context.setOldProjectFilePath(null);
+            context.setNewProjectFilePath(projectFilePath);
             
             codeGraphService.handle(context);
-            log.info("文件新增处理完成: file={}", filePath);
+            log.info("文件新增处理完成: projectPath={}", projectFilePath);
         } catch (Exception e) {
-            log.error("文件新增处理失败: file={}, error={}", filePath, e.getMessage(), e);
-            throw new RuntimeException("处理文件新增失败: " + filePath, e);
+            log.error("文件新增处理失败: projectPath={}, error={}", projectFilePath, e.getMessage(), e);
+            throw new RuntimeException("处理文件新增失败: " + projectFilePath, e);
         }
     }
     
     /**
      * 处理文件删除
      */
-    public void handleFileDeleted(String projectRoot, String filePath,
-                                               String[] classpathEntries, String[] sourcepathEntries) {
-        log.info("处理文件删除: file={}", filePath);
+    public void handleFileDeleted(String projectName, String absoluteFilePath, String projectFilePath,
+                                  String[] classpathEntries, String[] sourcepathEntries) {
+        log.info("处理文件删除: absolutePath={}, projectPath={}", absoluteFilePath, projectFilePath);
         
         try {
-            CodeGraphContext context = buildContext(projectRoot, classpathEntries, sourcepathEntries);
+            CodeGraphContext context = buildContext(projectName, absoluteFilePath, projectFilePath, classpathEntries, sourcepathEntries);
             context.setChangeType(ChangeType.SOURCE_DELETED);
-            context.setOldFilePath(filePath);
-            context.setNewFilePath(null);
+            context.setOldProjectFilePath(projectFilePath);
+            context.setNewProjectFilePath(null);
             
             codeGraphService.handle(context);
-            log.info("文件删除处理完成: file={}", filePath);
+            log.info("文件删除处理完成: projectPath={}", projectFilePath);
         } catch (Exception e) {
-            log.error("文件删除处理失败: file={}, error={}", filePath, e.getMessage(), e);
-            throw new RuntimeException("处理文件删除失败: " + filePath, e);
+            log.error("文件删除处理失败: projectPath={}, error={}", projectFilePath, e.getMessage(), e);
+            throw new RuntimeException("处理文件删除失败: " + projectFilePath, e);
         }
     }
     
     /**
      * 处理文件修改
      */
-    public void handleFileModified(String projectRoot, String filePath,
-                                                String[] classpathEntries, String[] sourcepathEntries) {
-        log.info("处理文件修改: file={}, classpathCount={}", filePath, 
+    public void handleFileModified(String projectName, String absoluteFilePath, String projectFilePath,
+                                   String[] classpathEntries, String[] sourcepathEntries) {
+        log.info("处理文件修改: absolutePath={}, projectPath={}, classpathCount={}", absoluteFilePath, projectFilePath,
                  classpathEntries != null ? classpathEntries.length : 0);
         
         try {
-            CodeGraphContext context = buildContext(projectRoot, classpathEntries, sourcepathEntries);
+            CodeGraphContext context = buildContext(projectName, absoluteFilePath, projectFilePath, classpathEntries, sourcepathEntries);
             context.setChangeType(ChangeType.SOURCE_MODIFIED);
-            context.setOldFilePath(filePath);
-            context.setNewFilePath(filePath);
+            context.setOldProjectFilePath(projectFilePath);
+            context.setNewProjectFilePath(projectFilePath);
             
             codeGraphService.handle(context);
-            log.info("文件修改处理完成: file={}", filePath);
+            log.info("文件修改处理完成: projectPath={}", projectFilePath);
         } catch (Exception e) {
-            log.error("文件修改处理失败: file={}, error={}", filePath, e.getMessage(), e);
-            throw new RuntimeException("处理文件修改失败: " + filePath, e);
+            log.error("文件修改处理失败: projectPath={}, error={}", projectFilePath, e.getMessage(), e);
+            throw new RuntimeException("处理文件修改失败: " + projectFilePath, e);
         }
     }
     
     /**
      * 构建上下文（注入 Repository 实现）
      */
-    private CodeGraphContext buildContext(String projectRoot, String[] classpathEntries, String[] sourcepathEntries) {
+    private CodeGraphContext buildContext(String projectName, String absoluteFilePath, String projectFilePath,
+                                          String[] classpathEntries, String[] sourcepathEntries) {
         CodeGraphContext context = new CodeGraphContext();
-        context.setProjectRoot(projectRoot);
+        context.setProjectName(projectName);
+        context.setAbsoluteFilePath(absoluteFilePath);
+        context.setProjectFilePath(projectFilePath);
         context.setClasspathEntries(classpathEntries);
         context.setSourcepathEntries(sourcepathEntries);
         
         // ========== 查询函数 (Reader) ==========
         
-        context.getReader().setFindWhoCallsMe(filePath -> 
-            repository.findWhoCallsMe(filePath)
+        context.getReader().setFindWhoCallsMe(path -> 
+            repository.findWhoCallsMe(path)
         );
         
-        context.getReader().setFindUnitsByFilePath(filePath -> 
-            repository.findUnitsByFilePath(filePath).stream()
+        context.getReader().setFindUnitsByProjectFilePath(path -> 
+            repository.findUnitsByProjectFilePath(path).stream()
                 .map(CodeGraphConverter::toDomain)
                 .collect(Collectors.toList())
         );
         
-        context.getReader().setFindFunctionsByFilePath(filePath -> 
-            repository.findFunctionsByFilePath(filePath).stream()
+        context.getReader().setFindFunctionsByProjectFilePath(path -> 
+            repository.findFunctionsByProjectFilePath(path).stream()
                 .map(CodeGraphConverter::toDomain)
                 .collect(Collectors.toList())
         );
@@ -159,8 +167,8 @@ public class IncrementalUpdateService {
         
         // ========== 修改函数 (Writer) ==========
         
-        context.getWriter().setDeleteFileOutgoingCalls(filePath -> 
-            repository.deleteFileOutgoingCalls(filePath)
+        context.getWriter().setDeleteFileOutgoingCalls(path -> 
+            repository.deleteFileOutgoingCalls(path)
         );
         
         context.getWriter().setDeleteNode(nodeId -> 
@@ -179,8 +187,8 @@ public class IncrementalUpdateService {
             repository.saveFunction(CodeGraphConverter.toDO(function))
         );
         
-        context.getWriter().setSaveCallRelationship(relationship -> 
-            repository.saveCallRelationship(CodeGraphConverter.toDO(relationship))
+        context.getWriter().setSaveRelationship(relationship -> 
+            repository.saveRelationship(CodeGraphConverter.toDO(relationship))
         );
         
         // ========== 批量插入函数 ==========
@@ -209,8 +217,8 @@ public class IncrementalUpdateService {
             )
         );
         
-        context.getWriter().setInsertCallRelationshipsBatch(relationships -> 
-            repository.insertCallRelationshipsBatch(
+        context.getWriter().setInsertRelationshipsBatch(relationships -> 
+            repository.insertRelationshipsBatch(
                 relationships.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())
@@ -243,8 +251,8 @@ public class IncrementalUpdateService {
             )
         );
         
-        context.getWriter().setUpdateCallRelationshipsBatch(relationships -> 
-            repository.updateCallRelationshipsBatch(
+        context.getWriter().setUpdateRelationshipsBatch(relationships -> 
+            repository.updateRelationshipsBatch(
                 relationships.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())
@@ -257,7 +265,8 @@ public class IncrementalUpdateService {
             // 收到代码变更事件（CASCADE） -> 重新调用 handleFileChange
             // 注意：这里是同步调用，实际生产环境建议发送 MQ 消息或 Spring Event
             this.handleFileChange(
-                event.getProjectRoot(),
+                event.getProjectName(),
+                event.getAbsoluteFilePath(),
                 event.getOldFileIdentifier(), // 级联变更的目标文件
                 event.getClasspathEntries(),
                 event.getSourcepathEntries(),

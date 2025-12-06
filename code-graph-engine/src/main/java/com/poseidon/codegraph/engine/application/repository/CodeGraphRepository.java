@@ -17,20 +17,20 @@ public interface CodeGraphRepository {
     /**
      * 查找谁依赖我（入边）
      * 
-     * @param targetFilePath 目标文件路径
+     * @param targetProjectFilePath 目标文件路径
      * @return 依赖该文件的文件路径列表
      */
-    List<String> findWhoCallsMe(String targetFilePath);
+    List<String> findWhoCallsMe(String targetProjectFilePath);
     
     /**
      * 根据文件路径查找所有代码单元
      */
-    List<CodeUnitDO> findUnitsByFilePath(String filePath);
+    List<CodeUnitDO> findUnitsByProjectFilePath(String projectFilePath);
     
     /**
      * 根据文件路径查找所有函数
      */
-    List<CodeFunctionDO> findFunctionsByFilePath(String filePath);
+    List<CodeFunctionDO> findFunctionsByProjectFilePath(String projectFilePath);
     
     /**
      * 根据全限定名查找函数
@@ -63,9 +63,9 @@ public interface CodeGraphRepository {
     /**
      * 删除文件的出边（该文件发起的调用）
      * 
-     * @param filePath 文件路径
+     * @param projectFilePath 文件路径
      */
-    void deleteFileOutgoingCalls(String filePath);
+    void deleteFileOutgoingCalls(String projectFilePath);
     
     /**
      * 删除节点（会自动删除所有相关的边）
@@ -82,7 +82,7 @@ public interface CodeGraphRepository {
     
     void saveFunction(CodeFunctionDO function);
     
-    void saveCallRelationship(CallRelationshipDO relationship);
+    void saveRelationship(CodeRelationshipDO relationship);
     
     // ========== 批量插入操作 ==========
     
@@ -102,9 +102,9 @@ public interface CodeGraphRepository {
     void insertPackagesBatch(java.util.List<CodePackageDO> packages);
     
     /**
-     * 批量插入调用关系（纯数据库操作，不做存在性检查）
+     * 批量插入关系（包括调用关系、结构关系等）（纯数据库操作，不做存在性检查）
      */
-    void insertCallRelationshipsBatch(java.util.List<CallRelationshipDO> relationships);
+    void insertRelationshipsBatch(java.util.List<CodeRelationshipDO> relationships);
     
     // ========== 批量更新操作 ==========
     
@@ -124,8 +124,8 @@ public interface CodeGraphRepository {
     void updatePackagesBatch(java.util.List<CodePackageDO> packages);
     
     /**
-     * 批量更新调用关系（纯数据库操作，不做存在性检查）
+     * 批量更新关系（包括调用关系、结构关系等）（纯数据库操作，不做存在性检查）
      */
-    void updateCallRelationshipsBatch(java.util.List<CallRelationshipDO> relationships);
+    void updateRelationshipsBatch(java.util.List<CodeRelationshipDO> relationships);
 }
 

@@ -1,5 +1,8 @@
 package com.poseidon.codegraph.engine.domain.parser;
 
+import com.poseidon.codegraph.engine.domain.parser.filter.FilterPipeline;
+import com.poseidon.codegraph.engine.domain.parser.filter.GetterSetterFilter;
+import com.poseidon.codegraph.engine.domain.parser.filter.PackageWhitelistFilter;
 import com.poseidon.codegraph.engine.domain.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jdt.core.dom.*;
@@ -10,40 +13,38 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.Set;
 
 /**
  * 基于 JDT 的源码解析器实现
- * 
- * 职责：
- * 1. 管理项目上下文（projectRoot, classpath, sourcepath）
- * 2. 创建 JDT AST (CompilationUnit)
- * 3. 解析代码单元、函数、调用关系等
  */
 @Slf4j
-public class JdtSourceCodeParser implements SourceCodeParser {
+public class JdtSourceCodeParser extends AbstractSourceCodeParser {
     
-    private final String projectRoot;
     private final String[] classpathEntries;
     private final String[] sourcepathEntries;
     
-    public JdtSourceCodeParser(String projectRoot, String[] classpathEntries, String[] sourcepathEntries) {
-        this.projectRoot = projectRoot;
+    // 司内包前缀白名单（只解析源码和这些包中的方法调用）
+    private static final Set<String> INTERNAL_PACKAGE_PREFIXES = Set.of(
+        "com.poseidon."
+    );
+    
+    public JdtSourceCodeParser(String[] classpathEntries, String[] sourcepathEntries) {
+        super(new FilterPipeline()
+            .addFilter(new GetterSetterFilter())
+            .addFilter(new PackageWhitelistFilter(INTERNAL_PACKAGE_PREFIXES)));
         this.classpathEntries = classpathEntries;
         this.sourcepathEntries = sourcepathEntries;
     }
     
-    /**
-     * 创建 AST (CompilationUnit)
-     */
-    private CompilationUnit createAST(String filePath) {
+    private CompilationUnit createAST(String absoluteFilePath) {
         try {
-            log.debug("开始解析文件: {}", filePath);
-            String source = Files.readString(Path.of(filePath));
+            log.debug("开始解析文件: {}", absoluteFilePath);
+            String source = Files.readString(Path.of(absoluteFilePath));
             ASTParser parser = ASTParser.newParser(AST.getJLSLatest());
             parser.setSource(source.toCharArray());
             parser.setKind(ASTParser.K_COMPILATION_UNIT);
             
-            // 构建完整的 classpath：用户提供的 classpath + JDK（用于类型绑定解析）
             String[] fullClasspath = buildFullClasspath();
             
             if (fullClasspath.length > 0) {
@@ -56,34 +57,28 @@ public class JdtSourceCodeParser implements SourceCodeParser {
                     fullClasspath,
                     sourcepathEntries != null ? sourcepathEntries : new String[0],
                     null,
-                    true  // includeRunningVMBootclasspath: true 表示包含运行时的 bootclasspath（JDK）
+                    true
                 );
-                parser.setUnitName(filePath);
+                parser.setUnitName(absoluteFilePath);
             } else {
-                log.warn("classpath 为空，禁用绑定解析: file={}, 这将导致类型绑定失败，数据可能不准确", filePath);
+                log.warn("classpath 为空，禁用绑定解析: file={}, 这将导致类型绑定失败，数据可能不准确", absoluteFilePath);
                 parser.setResolveBindings(false);
             }
             
             CompilationUnit cu = (CompilationUnit) parser.createAST(null);
-            log.debug("文件解析完成: {}", filePath);
+            log.debug("文件解析完成: {}", absoluteFilePath);
             return cu;
         } catch (IOException e) {
-            log.error("文件读取失败: file={}, error={}", filePath, e.getMessage());
-            throw new RuntimeException("Failed to parse file: " + filePath, e);
+            log.error("文件读取失败: file={}, error={}", absoluteFilePath, e.getMessage());
+            throw new RuntimeException("Failed to parse file: " + absoluteFilePath, e);
         } catch (Exception e) {
-            log.error("AST 创建失败: file={}, error={}", filePath, e.getMessage());
-            throw new RuntimeException("Failed to create AST for file: " + filePath, e);
+            log.error("AST 创建失败: file={}, error={}", absoluteFilePath, e.getMessage());
+            throw new RuntimeException("Failed to create AST for file: " + absoluteFilePath, e);
         }
     }
     
-    /**
-     * 构建完整的 classpath：用户提供的 classpath + JDK
-     * JDK 只用于类型绑定解析，不会解析成节点
-     */
     private String[] buildFullClasspath() {
         List<String> fullClasspath = new ArrayList<>();
-        
-        // 1. 添加用户提供的 classpath
         if (classpathEntries != null) {
             for (String entry : classpathEntries) {
                 if (entry != null && !entry.isEmpty()) {
@@ -91,72 +86,60 @@ public class JdtSourceCodeParser implements SourceCodeParser {
                 }
             }
         }
-        
-        // 2. 添加 JDK（用于类型绑定解析）
-        // 注意：JDK 只用于类型绑定解析（如 String -> java.lang.String），不会创建 JDK 的节点
-        // 因为 parseUnits/parseFunctions 只遍历当前文件的 AST，不会遍历 JDK 的类
-        String javaHome = System.getProperty("java.home");
-        if (javaHome != null) {
-            // Java 9+ 使用模块系统，JDK 类通过 jrt-fs 访问
-            // setEnvironment 的 includeRunningVMBootclasspath=true 应该会自动包含
-            // 但如果绑定解析仍然失败，可以尝试添加 JDK 的 lib 目录
-            Path jdkLibPath = Path.of(javaHome, "lib");
-            if (jdkLibPath.toFile().exists()) {
-                // 对于 Java 9+，JDK 类在模块系统中，不需要手动添加
-                // 对于 Java 8，可以添加 rt.jar，但 setEnvironment 应该已经处理了
-            }
-        }
-        
         return fullClasspath.toArray(new String[0]);
     }
     
     @Override
-    public CodeGraph parse(String filePath) {
-        log.info("开始解析代码图谱: file={}", filePath);
+    public CodeGraph parse(String absoluteFilePath, String projectName, String projectFilePath) {
+        log.info("开始解析代码图谱: absoluteFile={}, projectFile={}", absoluteFilePath, projectFilePath);
         CodeGraph graph = new CodeGraph();
-        CompilationUnit cu = createAST(filePath);
+        CompilationUnit cu = createAST(absoluteFilePath);
         
-        // 1. 解析 Package
-        List<CodePackage> packages = parsePackages(cu, filePath);
+        List<CodePackage> packages = parsePackages(cu, absoluteFilePath, projectName, projectFilePath);
         packages.forEach(graph::addPackage);
-        log.debug("解析 Package 完成: file={}, packageCount={}", filePath, packages.size());
+        log.debug("解析 Package 完成: file={}, packageCount={}", projectFilePath, packages.size());
         
-        // 2. 解析 Units 和 Functions
-        List<CodeUnit> units = parseUnits(cu, filePath);
+        List<CodeUnit> units = parseUnits(cu, absoluteFilePath, projectName, projectFilePath);
         int functionCount = 0;
+        String packageId = packages.isEmpty() ? null : packages.get(0).getId();
+        
         for (CodeUnit unit : units) {
+            if (packageId != null) {
+                unit.setPackageId(packageId);
+            }
             graph.addUnit(unit);
             unit.getFunctions().forEach(graph::addFunction);
             functionCount += unit.getFunctions().size();
         }
         log.info("解析 Units 和 Functions 完成: file={}, unitCount={}, functionCount={}", 
-                 filePath, units.size(), functionCount);
+                 projectFilePath, units.size(), functionCount);
         
-        // 3. 解析调用关系
-        List<CallRelationship> relationships = parseRelationships(cu, filePath);
+        buildBelongsToRelationships(graph, packages, units);
+        
+        List<CodeRelationship> relationships = parseRelationships(cu, projectName, projectFilePath);
         relationships.forEach(graph::addRelationship);
         
         log.info("代码图谱解析完成: file={}, packages={}, units={}, functions={}, relationships={}", 
-                 filePath, packages.size(), units.size(), functionCount, relationships.size());
+                 projectFilePath, packages.size(), units.size(), functionCount, graph.getRelationshipsAsList().size());
         return graph;
     }
     
     @Override
-    public List<CodePackage> parsePackages(String filePath) {
-        CompilationUnit cu = createAST(filePath);
-        return parsePackages(cu, filePath);
+    public List<CodePackage> parsePackages(String absoluteFilePath, String projectName, String projectFilePath) {
+        CompilationUnit cu = createAST(absoluteFilePath);
+        return parsePackages(cu, absoluteFilePath, projectName, projectFilePath);
     }
     
     @Override
-    public List<CodeUnit> parseUnits(String filePath) {
-        CompilationUnit cu = createAST(filePath);
-        return parseUnits(cu, filePath);
+    public List<CodeUnit> parseUnits(String absoluteFilePath, String projectName, String projectFilePath) {
+        CompilationUnit cu = createAST(absoluteFilePath);
+        return parseUnits(cu, absoluteFilePath, projectName, projectFilePath);
     }
     
     @Override
-    public List<CodeFunction> parseFunctions(String filePath) {
-        CompilationUnit cu = createAST(filePath);
-        List<CodeUnit> units = parseUnits(cu, filePath);
+    public List<CodeFunction> parseFunctions(String absoluteFilePath, String projectName, String projectFilePath) {
+        CompilationUnit cu = createAST(absoluteFilePath);
+        List<CodeUnit> units = parseUnits(cu, absoluteFilePath, projectName, projectFilePath);
         List<CodeFunction> functions = new ArrayList<>();
         for (CodeUnit unit : units) {
             functions.addAll(unit.getFunctions());
@@ -165,48 +148,47 @@ public class JdtSourceCodeParser implements SourceCodeParser {
     }
     
     @Override
-    public List<CallRelationship> parseRelationships(String filePath) {
-        CompilationUnit cu = createAST(filePath);
-        return parseRelationships(cu, filePath);
+    public List<CodeRelationship> parseRelationships(String absoluteFilePath, String projectName, String projectFilePath) {
+        CompilationUnit cu = createAST(absoluteFilePath);
+        return parseRelationships(cu, projectName, projectFilePath);
     }
     
-    // ========== 内部解析方法 ==========
-    
-    private List<CodePackage> parsePackages(CompilationUnit cu, String filePath) {
+    private List<CodePackage> parsePackages(CompilationUnit cu, String absoluteFilePath, String projectName, String projectFilePath) {
         List<CodePackage> packages = new ArrayList<>();
         String packageName = extractPackageName(cu);
         if (packageName != null && !packageName.isEmpty()) {
             CodePackage pkg = new CodePackage();
-            pkg.setId(packageName);
+            pkg.setId(projectName + ":" + packageName);
             pkg.setName(packageName);
             pkg.setQualifiedName(packageName);
             pkg.setPackagePath(packageName.replace('.', '/'));
-            // Package 的 filePath 是包所在的目录路径
-            String packageDir = Path.of(filePath).getParent().toString();
-            pkg.setFilePath(toRelativePath(packageDir));
+            
+            Path path = Path.of(projectFilePath);
+            String packageDir = path.getParent() != null ? path.getParent().toString() : "";
+            pkg.setProjectFilePath(packageDir.replace('\\', '/'));
             pkg.setLanguage("java");
             packages.add(pkg);
         }
         return packages;
     }
     
-    private List<CodeUnit> parseUnits(CompilationUnit cu, String filePath) {
+    private List<CodeUnit> parseUnits(CompilationUnit cu, String absoluteFilePath, String projectName, String projectFilePath) {
         List<CodeUnit> units = new ArrayList<>();
         String packageName = extractPackageName(cu);
         
         for (Object type : cu.types()) {
             if (type instanceof TypeDeclaration) {
-                units.add(parseTypeDeclaration((TypeDeclaration) type, filePath, packageName, cu));
+                units.add(parseTypeDeclaration((TypeDeclaration) type, projectName, projectFilePath, packageName, cu));
             } else if (type instanceof EnumDeclaration) {
-                units.add(parseEnumDeclaration((EnumDeclaration) type, filePath, packageName, cu));
+                units.add(parseEnumDeclaration((EnumDeclaration) type, projectName, projectFilePath, packageName, cu));
             } else if (type instanceof AnnotationTypeDeclaration) {
-                units.add(parseAnnotationTypeDeclaration((AnnotationTypeDeclaration) type, filePath, packageName, cu));
+                units.add(parseAnnotationTypeDeclaration((AnnotationTypeDeclaration) type, projectName, projectFilePath, packageName, cu));
             }
         }
         return units;
     }
     
-    private CodeUnit parseTypeDeclaration(TypeDeclaration typeDecl, String filePath, 
+    private CodeUnit parseTypeDeclaration(TypeDeclaration typeDecl, String projectName, String projectFilePath, 
                                          String packageName, CompilationUnit cu) {
         CodeUnit unit = new CodeUnit();
         unit.setName(typeDecl.getName().getIdentifier());
@@ -220,29 +202,27 @@ public class JdtSourceCodeParser implements SourceCodeParser {
         }
         
         unit.setQualifiedName(binding.getQualifiedName());
-        
-        unit.setId(unit.getQualifiedName());
+        unit.setId(projectName + ":" + unit.getQualifiedName());
         unit.setUnitType(typeDecl.isInterface() ? "interface" : "class");
         
         int modifiers = typeDecl.getModifiers();
         unit.setModifiers(extractModifiers(modifiers));
         unit.setIsAbstract(Modifier.isAbstract(modifiers));
         
-        unit.setFilePath(toRelativePath(filePath));
+        unit.setProjectFilePath(projectFilePath);
         unit.setStartLine(cu.getLineNumber(typeDecl.getStartPosition()));
         unit.setEndLine(cu.getLineNumber(typeDecl.getStartPosition() + typeDecl.getLength()));
         unit.setLanguage("java");
         
-        // 解析方法
         for (MethodDeclaration method : typeDecl.getMethods()) {
-            CodeFunction function = parseMethodDeclaration(method, unit, cu);
+            CodeFunction function = parseMethodDeclaration(method, unit, projectName, cu);
             unit.addFunction(function);
         }
         
         return unit;
     }
     
-    private CodeUnit parseEnumDeclaration(EnumDeclaration enumDecl, String filePath,
+    private CodeUnit parseEnumDeclaration(EnumDeclaration enumDecl, String projectName, String projectFilePath,
                                          String packageName, CompilationUnit cu) {
         CodeUnit unit = new CodeUnit();
         unit.setName(enumDecl.getName().getIdentifier());
@@ -256,12 +236,11 @@ public class JdtSourceCodeParser implements SourceCodeParser {
         }
         
         unit.setQualifiedName(binding.getQualifiedName());
-        
-        unit.setId(unit.getQualifiedName());
+        unit.setId(projectName + ":" + unit.getQualifiedName());
         unit.setUnitType("enum");
         unit.setModifiers(extractModifiers(enumDecl.getModifiers()));
         unit.setIsAbstract(false);
-        unit.setFilePath(toRelativePath(filePath));
+        unit.setProjectFilePath(projectFilePath);
         unit.setStartLine(cu.getLineNumber(enumDecl.getStartPosition()));
         unit.setEndLine(cu.getLineNumber(enumDecl.getStartPosition() + enumDecl.getLength()));
         unit.setLanguage("java");
@@ -269,7 +248,7 @@ public class JdtSourceCodeParser implements SourceCodeParser {
         return unit;
     }
     
-    private CodeUnit parseAnnotationTypeDeclaration(AnnotationTypeDeclaration annoDecl, String filePath,
+    private CodeUnit parseAnnotationTypeDeclaration(AnnotationTypeDeclaration annoDecl, String projectName, String projectFilePath,
                                                    String packageName, CompilationUnit cu) {
         CodeUnit unit = new CodeUnit();
         unit.setName(annoDecl.getName().getIdentifier());
@@ -283,12 +262,11 @@ public class JdtSourceCodeParser implements SourceCodeParser {
         }
         
         unit.setQualifiedName(binding.getQualifiedName());
-        
-        unit.setId(unit.getQualifiedName());
+        unit.setId(projectName + ":" + unit.getQualifiedName());
         unit.setUnitType("annotation");
         unit.setModifiers(extractModifiers(annoDecl.getModifiers()));
         unit.setIsAbstract(false);
-        unit.setFilePath(toRelativePath(filePath));
+        unit.setProjectFilePath(projectFilePath);
         unit.setStartLine(cu.getLineNumber(annoDecl.getStartPosition()));
         unit.setEndLine(cu.getLineNumber(annoDecl.getStartPosition() + annoDecl.getLength()));
         unit.setLanguage("java");
@@ -296,7 +274,7 @@ public class JdtSourceCodeParser implements SourceCodeParser {
         return unit;
     }
     
-    private CodeFunction parseMethodDeclaration(MethodDeclaration method, CodeUnit unit, CompilationUnit cu) {
+    private CodeFunction parseMethodDeclaration(MethodDeclaration method, CodeUnit unit, String projectName, CompilationUnit cu) {
         CodeFunction function = new CodeFunction();
         function.setName(method.getName().getIdentifier());
         
@@ -305,9 +283,8 @@ public class JdtSourceCodeParser implements SourceCodeParser {
         
         String qualifiedName = unit.getQualifiedName() + "." + signature;
         function.setQualifiedName(qualifiedName);
-        function.setId(qualifiedName);
+        function.setId(projectName + ":" + qualifiedName);
         
-        // 设置返回类型（使用完整类型名）
         IMethodBinding binding = method.resolveBinding();
         if (binding == null) {
             log.error("方法绑定解析失败，无法获取返回类型: method={}", function.getName());
@@ -328,7 +305,7 @@ public class JdtSourceCodeParser implements SourceCodeParser {
         function.setIsConstructor(method.isConstructor());
         function.setIsAsync(false);
         
-        function.setFilePath(unit.getFilePath());
+        function.setProjectFilePath(unit.getProjectFilePath());
         function.setStartLine(cu.getLineNumber(method.getStartPosition()));
         function.setEndLine(cu.getLineNumber(method.getStartPosition() + method.getLength()));
         function.setLanguage("java");
@@ -336,25 +313,23 @@ public class JdtSourceCodeParser implements SourceCodeParser {
         return function;
     }
     
-    private List<CallRelationship> parseRelationships(CompilationUnit cu, String filePath) {
-        List<CallRelationship> relationships = new ArrayList<>();
+    private List<CodeRelationship> parseRelationships(CompilationUnit cu, String projectName, String projectFilePath) {
+        List<CodeRelationship> relationships = new ArrayList<>();
         
         cu.accept(new ASTVisitor() {
             @Override
             public boolean visit(MethodInvocation node) {
                 String methodName = node.getName().getIdentifier();
                 int lineNumber = cu.getLineNumber(node.getStartPosition());
-                
+
                 IMethodBinding targetBinding = node.resolveMethodBinding();
                 if (targetBinding == null) {
-                    // 错误：被调用方法的绑定解析失败
-                    log.error("方法调用的目标绑定解析失败: file={}, line={}, method={}, " +
-                              "请检查 classpath 配置。", 
-                              filePath, lineNumber, methodName);
-                    throw new RuntimeException("方法调用的目标绑定解析失败: file=" + filePath + 
-                        ", line=" + lineNumber + ", method=" + methodName + 
-                        "，请检查 classpath 配置是否包含所有必要的依赖和 JDK。");
+                    log.debug("方法目标绑定失败（跳过）: file={}, line={}, method={}", 
+                              projectFilePath, lineNumber, methodName);
+                    return true;
                 }
+                
+                // 硬编码过滤逻辑已移除，改用 PackageWhitelistFilter
                 
                 ASTNode current = node.getParent();
                 while (current != null && !(current instanceof MethodDeclaration)) {
@@ -362,80 +337,94 @@ public class JdtSourceCodeParser implements SourceCodeParser {
                 }
                 
                 if (!(current instanceof MethodDeclaration)) {
-                    // 错误：无法找到调用者方法声明
-                    log.error("无法找到调用者方法声明: file={}, line={}, method={}, " +
-                              "方法调用不在任何方法内部。请检查代码结构。", 
-                              filePath, lineNumber, methodName);
-                    throw new RuntimeException("无法找到调用者方法声明: file=" + filePath + 
-                        ", line=" + lineNumber + ", method=" + methodName + 
-                        "，方法调用不在任何方法内部。");
+                    log.warn("无法找到调用者方法声明（跳过）: file={}, line={}, method={}", 
+                              projectFilePath, lineNumber, methodName);
+                    return true;
                 }
                 
                 MethodDeclaration callerMethod = (MethodDeclaration) current;
                 IMethodBinding callerBinding = callerMethod.resolveBinding();
                 
                 if (callerBinding == null) {
-                    // 错误：调用者方法的绑定解析失败
                     String callerMethodName = callerMethod.getName().getIdentifier();
-                    log.error("调用者方法绑定解析失败: file={}, line={}, callerMethod={}, targetMethod={}, " +
-                              "请检查 classpath 配置。", 
-                              filePath, lineNumber, callerMethodName, methodName);
-                    throw new RuntimeException("调用者方法绑定解析失败: file=" + filePath + 
-                        ", line=" + lineNumber + ", callerMethod=" + callerMethodName + 
-                        ", targetMethod=" + methodName + 
-                        "，请检查 classpath 配置是否包含所有必要的依赖和 JDK。");
+                    log.warn("调用者绑定失败（跳过）: file={}, line={}, callerMethod={}", 
+                              projectFilePath, lineNumber, callerMethodName);
+                    return true;
                 }
                 
-                CallRelationship rel = new CallRelationship();
+                CodeRelationship rel = new CodeRelationship();
                 rel.setId(UUID.randomUUID().toString());
                 
-                // 调用者和被调用者都使用完整类型名（避免类型歧义）
                 String callerQualifiedName = buildQualifiedName(callerBinding);
-                rel.setFromFunctionId(callerQualifiedName);
+                String fromNodeId = projectName + ":" + callerQualifiedName;
+                rel.setFromNodeId(fromNodeId);
+                rel.setFromFunctionId(fromNodeId);
                 
                 String targetQualifiedName = buildQualifiedName(targetBinding);
-                rel.setToFunctionId(targetQualifiedName);
+                String toNodeId;
                 
+                if (targetBinding.getDeclaringClass() != null && targetBinding.getDeclaringClass().isFromSource()) {
+                    toNodeId = projectName + ":" + targetQualifiedName;
+                } else {
+                    toNodeId = targetQualifiedName;
+                }
+                
+                rel.setToNodeId(toNodeId);
+                rel.setToFunctionId(toNodeId);
+                
+                rel.setRelationshipType(RelationshipType.CALLS);
                 rel.setLineNumber(lineNumber);
                 rel.setCallType(Modifier.isStatic(targetBinding.getModifiers()) ? "static" : "virtual");
                 rel.setLanguage("java");
                 
+                if (!shouldKeepRelationship(rel, targetBinding)) {
+                    log.debug("过滤掉关系: {} -> {}", fromNodeId, toNodeId);
+                    return true;
+                }
+                
                 relationships.add(rel);
                 
-                log.debug("解析调用关系成功: {}:{} -> {}", filePath, lineNumber, targetQualifiedName);
+                log.debug("解析调用关系成功: {}:{} -> {}", projectFilePath, lineNumber, toNodeId);
                 return true;
             }
         });
         
-        log.info("文件调用关系解析完成: file={}, relationshipCount={}", filePath, relationships.size());
+        log.info("文件调用关系解析完成: file={}, relationshipCount={}", projectFilePath, relationships.size());
         return relationships;
     }
     
-    // ========== 辅助方法 ==========
-    
-    /**
-     * 将绝对路径转换为相对于项目根的路径
-     */
-    private String toRelativePath(String absolutePath) {
-        if (projectRoot == null || projectRoot.isEmpty()) {
-            return absolutePath;
+    private void buildBelongsToRelationships(CodeGraph graph, List<CodePackage> packages, List<CodeUnit> units) {
+        String packageId = packages.isEmpty() ? null : packages.get(0).getId();
+        
+        if (packageId != null) {
+            for (CodeUnit unit : units) {
+                CodeRelationship rel = new CodeRelationship();
+                rel.setId(UUID.randomUUID().toString());
+                rel.setFromNodeId(packageId);
+                rel.setToNodeId(unit.getId());
+                rel.setRelationshipType(RelationshipType.PACKAGE_TO_UNIT);
+                rel.setLanguage("java");
+                graph.addRelationship(rel);
+                log.debug("构建结构关系: Package {} -> Unit {}", packageId, unit.getId());
+            }
         }
         
-        try {
-            Path projectPath = Path.of(projectRoot).toAbsolutePath().normalize();
-            Path filePath = Path.of(absolutePath).toAbsolutePath().normalize();
-            
-            if (filePath.startsWith(projectPath)) {
-                Path relative = projectPath.relativize(filePath);
-                return relative.toString().replace('\\', '/'); // 统一使用 / 分隔符
+        for (CodeUnit unit : units) {
+            for (CodeFunction function : unit.getFunctions()) {
+                CodeRelationship rel = new CodeRelationship();
+                rel.setId(UUID.randomUUID().toString());
+                rel.setFromNodeId(unit.getId());
+                rel.setToNodeId(function.getId());
+                rel.setRelationshipType(RelationshipType.UNIT_TO_FUNCTION);
+                rel.setLanguage("java");
+                graph.addRelationship(rel);
+                log.debug("构建结构关系: Unit {} -> Function {}", unit.getId(), function.getId());
             }
-            
-            // 如果文件不在项目根目录下，返回原路径
-            return absolutePath;
-        } catch (Exception e) {
-            // 如果转换失败，返回原路径
-            return absolutePath;
         }
+        
+        log.info("构建结构关系完成: packageToUnit={}, unitToFunction={}", 
+                 packageId != null ? units.size() : 0,
+                 units.stream().mapToInt(u -> u.getFunctions().size()).sum());
     }
     
     private String extractPackageName(CompilationUnit cu) {
@@ -458,54 +447,34 @@ public class JdtSourceCodeParser implements SourceCodeParser {
         return result;
     }
     
-    /**
-     * 构建方法签名，使用完整类型名（避免类型歧义）
-     * 例如：findUser(java.lang.String, java.lang.Integer):com.example.User
-     * 
-     * 注意：如果绑定解析失败，直接抛出异常，不使用 fallback 逻辑
-     */
     private String buildMethodSignature(MethodDeclaration method) {
         String methodName = method.getName().getIdentifier();
-        
-        // 必须使用 IMethodBinding 获取完整类型名
         IMethodBinding binding = method.resolveBinding();
         if (binding == null) {
             log.error("方法绑定解析失败: method={}, 可能原因: classpath 不完整或 JDK 未正确配置。", methodName);
             throw new RuntimeException("方法绑定解析失败: " + methodName + 
                 "，请检查 classpath 配置是否包含所有必要的依赖和 JDK。");
         }
-        
         return buildMethodSignatureFromBinding(binding);
     }
     
-    /**
-     * 从 IMethodBinding 构建方法签名（使用完整类型名）
-     */
     private String buildMethodSignatureFromBinding(IMethodBinding binding) {
         StringBuilder sig = new StringBuilder(binding.getName()).append("(");
-        
         ITypeBinding[] params = binding.getParameterTypes();
         for (int i = 0; i < params.length; i++) {
             if (i > 0) sig.append(", ");
             sig.append(getQualifiedTypeName(params[i]));
         }
-        
         sig.append("):");
-        
         ITypeBinding returnType = binding.getReturnType();
         if (returnType != null) {
             sig.append(getQualifiedTypeName(returnType));
         } else {
             sig.append("void");
         }
-        
         return sig.toString();
     }
     
-    /**
-     * 构建方法的完整限定名（使用完整类型名）
-     * 例如：com.example.UserService.findUser(java.lang.String, java.lang.Integer):com.example.User
-     */
     private String buildQualifiedName(IMethodBinding binding) {
         StringBuilder sb = new StringBuilder();
         sb.append(binding.getDeclaringClass().getQualifiedName());
@@ -514,24 +483,15 @@ public class JdtSourceCodeParser implements SourceCodeParser {
         return sb.toString();
     }
     
-    /**
-     * 获取类型的完整限定名（避免类型歧义）
-     * 例如：java.lang.String -> java.lang.String
-     *       java.util.List -> java.util.List
-     *       int[] -> int[]
-     */
     private String getQualifiedTypeName(ITypeBinding typeBinding) {
         if (typeBinding.isArray()) {
-            // 数组类型：递归处理元素类型
             ITypeBinding elementType = typeBinding.getElementType();
             return getQualifiedTypeName(elementType) + "[]";
         } else if (typeBinding.isPrimitive()) {
-            // 基本类型：直接返回名称
             return typeBinding.getName();
         } else {
-            // 引用类型：返回完整限定名
-            return typeBinding.getQualifiedName();
+            // 使用擦除后的类型，避免泛型差异导致ID不一致
+            return typeBinding.getErasure().getQualifiedName();
         }
     }
-    
 }

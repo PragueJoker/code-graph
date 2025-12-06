@@ -30,9 +30,9 @@ public class CodeGraphService {
      * 处理文件变更
      */
     public void handle(CodeGraphContext context) {
-        log.debug("开始处理代码变更: changeType={}, filePath={}", 
+        log.debug("开始处理代码变更: changeType={}, projectFilePath={}", 
                   context.getChangeType(), 
-                  context.getNewFilePath() != null ? context.getNewFilePath() : context.getOldFilePath());
+                  context.getNewProjectFilePath() != null ? context.getNewProjectFilePath() : context.getOldProjectFilePath());
         
         for (CodeChangeProcessor processor : processors) {
             if (processor.support(context)) {
@@ -51,9 +51,9 @@ public class CodeGraphService {
             }
         }
         
-        log.error("未找到支持的处理器: changeType={}, filePath={}", 
+        log.error("未找到支持的处理器: changeType={}, projectFilePath={}", 
                   context.getChangeType(), 
-                  context.getNewFilePath() != null ? context.getNewFilePath() : context.getOldFilePath());
+                  context.getNewProjectFilePath() != null ? context.getNewProjectFilePath() : context.getOldProjectFilePath());
         throw new IllegalArgumentException("No processor found for context: changeType=" + context.getChangeType());
     }
 }

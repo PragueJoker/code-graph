@@ -17,21 +17,21 @@ public class GraphReader {
     
     /**
      * 查找谁依赖我（入边）
-     * Input: filePath -> Output: List<dependentFilePath>
+     * Input: projectFilePath -> Output: List<dependentProjectFilePath>
      */
     private Function<String, List<String>> findWhoCallsMe;
     
     /**
      * 查找文件的所有代码单元
-     * Input: filePath -> Output: List<CodeUnit>
+     * Input: projectFilePath -> Output: List<CodeUnit>
      */
-    private Function<String, List<CodeUnit>> findUnitsByFilePath;
+    private Function<String, List<CodeUnit>> findUnitsByProjectFilePath;
     
     /**
      * 查找文件的所有函数
-     * Input: filePath -> Output: List<CodeFunction>
+     * Input: projectFilePath -> Output: List<CodeFunction>
      */
-    private Function<String, List<CodeFunction>> findFunctionsByFilePath;
+    private Function<String, List<CodeFunction>> findFunctionsByProjectFilePath;
     
     /**
      * 根据全限定名查找函数

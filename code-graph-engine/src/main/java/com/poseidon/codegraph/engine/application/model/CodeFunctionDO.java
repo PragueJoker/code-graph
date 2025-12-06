@@ -12,7 +12,7 @@ public class CodeFunctionDO {
     private String name;
     private String qualifiedName;
     private String language;
-    private String filePath;
+    private String projectFilePath;
     private Integer startLine;
     private Integer endLine;
     private String signature;

@@ -21,16 +21,16 @@ public class RemovedSourceProcessor extends AbstractChangeProcessor {
     
     @Override
     public void handle(CodeGraphContext context) {
-        String filePath = context.getOldFilePath();
-        log.info("处理删除文件: {}", filePath);
+        String projectFilePath = context.getOldProjectFilePath();
+        log.info("处理删除文件: {}", projectFilePath);
         
         // 步骤 1：查找谁依赖我
-        List<String> dependentFiles = context.getReader().getFindWhoCallsMe().apply(filePath);
+        List<String> dependentFiles = context.getReader().getFindWhoCallsMe().apply(projectFilePath);
         log.debug("找到依赖文件: {} 个", dependentFiles.size());
         
         // 步骤 2：查找该文件的所有节点
-        List<CodeUnit> units = context.getReader().getFindUnitsByFilePath().apply(filePath);
-        List<CodeFunction> fileFunctions = context.getReader().getFindFunctionsByFilePath().apply(filePath);
+        List<CodeUnit> units = context.getReader().getFindUnitsByProjectFilePath().apply(projectFilePath);
+        List<CodeFunction> fileFunctions = context.getReader().getFindFunctionsByProjectFilePath().apply(projectFilePath);
         
         // 步骤 3：删除所有节点（会自动删除所有相关的边）
         deleteNodes(units, fileFunctions, context);
@@ -40,4 +40,3 @@ public class RemovedSourceProcessor extends AbstractChangeProcessor {
         triggerCascadeChanges(context, dependentFiles);
     }
 }
-

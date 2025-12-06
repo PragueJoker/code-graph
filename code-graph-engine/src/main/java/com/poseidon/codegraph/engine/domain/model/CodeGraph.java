@@ -27,9 +27,9 @@ public class CodeGraph {
     private List<CodeFunction> functions = new ArrayList<>();
     
     /**
-     * 调用关系列表
+     * 关系列表（包括调用关系、结构关系等）
      */
-    private List<CallRelationship> relationships = new ArrayList<>();
+    private List<CodeRelationship> relationships = new ArrayList<>();
     
     /**
      * 添加包
@@ -62,9 +62,9 @@ public class CodeGraph {
     }
     
     /**
-     * 添加调用关系
+     * 添加关系（包括调用关系、结构关系等）
      */
-    public void addRelationship(CallRelationship relationship) {
+    public void addRelationship(CodeRelationship relationship) {
         if (this.relationships == null) {
             this.relationships = new ArrayList<>();
         }
@@ -93,9 +93,9 @@ public class CodeGraph {
     }
     
     /**
-     * 获取调用关系列表
+     * 获取关系列表（包括调用关系、结构关系等）
      */
-    public List<CallRelationship> getRelationshipsAsList() {
+    public List<CodeRelationship> getRelationshipsAsList() {
         return this.relationships != null ? this.relationships : new ArrayList<>();
     }
 }

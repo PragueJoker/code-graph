@@ -33,15 +33,21 @@ public class CodeGraphController {
     @PostMapping("/files/nodes")
     public ApiResponse<Void> createFileNodes(@RequestBody CreateFileNodesRequest request) {
         try {
-            log.info("创建文件节点请求: projectRoot={}, filePath={}", 
-                request.getProjectRoot(), request.getFilePath());
+            log.info("创建文件节点请求: projectName={}, absoluteFile={}, projectFile={}", 
+                request.getProjectName(), request.getAbsoluteFilePath(), request.getProjectFilePath());
             
             // 参数校验
-            if (request.getProjectRoot() == null || request.getProjectRoot().trim().isEmpty()) {
-                return ApiResponse.error(400, "项目根目录不能为空");
+            if (request.getAbsoluteFilePath() == null || request.getAbsoluteFilePath().trim().isEmpty()) {
+                return ApiResponse.error(400, "文件绝对路径不能为空");
             }
-            if (request.getFilePath() == null || request.getFilePath().trim().isEmpty()) {
-                return ApiResponse.error(400, "文件路径不能为空");
+            if (request.getProjectFilePath() == null || request.getProjectFilePath().trim().isEmpty()) {
+                return ApiResponse.error(400, "项目相对路径不能为空");
+            }
+            // projectName 允许为空吗？建议必填，用于ID唯一性
+            if (request.getProjectName() == null || request.getProjectName().trim().isEmpty()) {
+                // 为了兼容性，如果没有传 projectName，可以暂定为空字符串或 default
+                // 但根据设计要求，应该必填
+                // return ApiResponse.error(400, "项目名称不能为空");
             }
             
             // 转换 classpath 和 sourcepath
@@ -54,17 +60,18 @@ public class CodeGraphController {
             
             // 调用服务处理文件新增
             incrementalUpdateService.handleFileAdded(
-                request.getProjectRoot(),
-                request.getFilePath(),
+                request.getProjectName(),
+                request.getAbsoluteFilePath(),
+                request.getProjectFilePath(),
                 classpathEntries,
                 sourcepathEntries
             );
             
-            log.info("文件节点创建成功: {}", request.getFilePath());
+            log.info("文件节点创建成功: {}", request.getProjectFilePath());
             return ApiResponse.success("文件节点创建成功", null);
             
         } catch (Exception e) {
-            log.error("创建文件节点失败: {}", request.getFilePath(), e);
+            log.error("创建文件节点失败: {}", request.getProjectFilePath(), e);
             return ApiResponse.error("创建文件节点失败: " + e.getMessage());
         }
     }
@@ -79,15 +86,15 @@ public class CodeGraphController {
     @PutMapping("/files/nodes")
     public ApiResponse<Void> updateFileNodes(@RequestBody CreateFileNodesRequest request) {
         try {
-            log.info("更新文件节点请求: projectRoot={}, filePath={}", 
-                request.getProjectRoot(), request.getFilePath());
+            log.info("更新文件节点请求: projectName={}, absoluteFile={}, projectFile={}", 
+                request.getProjectName(), request.getAbsoluteFilePath(), request.getProjectFilePath());
             
             // 参数校验
-            if (request.getProjectRoot() == null || request.getProjectRoot().trim().isEmpty()) {
-                return ApiResponse.error(400, "项目根目录不能为空");
+            if (request.getAbsoluteFilePath() == null || request.getAbsoluteFilePath().trim().isEmpty()) {
+                return ApiResponse.error(400, "文件绝对路径不能为空");
             }
-            if (request.getFilePath() == null || request.getFilePath().trim().isEmpty()) {
-                return ApiResponse.error(400, "文件路径不能为空");
+            if (request.getProjectFilePath() == null || request.getProjectFilePath().trim().isEmpty()) {
+                return ApiResponse.error(400, "项目相对路径不能为空");
             }
             
             // 转换 classpath 和 sourcepath
@@ -100,17 +107,18 @@ public class CodeGraphController {
             
             // 调用服务处理文件修改
             incrementalUpdateService.handleFileModified(
-                request.getProjectRoot(),
-                request.getFilePath(),
+                request.getProjectName(),
+                request.getAbsoluteFilePath(),
+                request.getProjectFilePath(),
                 classpathEntries,
                 sourcepathEntries
             );
             
-            log.info("文件节点更新成功: {}", request.getFilePath());
+            log.info("文件节点更新成功: {}", request.getProjectFilePath());
             return ApiResponse.success("文件节点更新成功", null);
             
         } catch (Exception e) {
-            log.error("更新文件节点失败: {}", request.getFilePath(), e);
+            log.error("更新文件节点失败: {}", request.getProjectFilePath(), e);
             return ApiResponse.error("更新文件节点失败: " + e.getMessage());
         }
     }
@@ -125,15 +133,12 @@ public class CodeGraphController {
     @DeleteMapping("/files/nodes")
     public ApiResponse<Void> deleteFileNodes(@RequestBody CreateFileNodesRequest request) {
         try {
-            log.info("删除文件节点请求: projectRoot={}, filePath={}", 
-                request.getProjectRoot(), request.getFilePath());
+            log.info("删除文件节点请求: projectName={}, projectFile={}", 
+                request.getProjectName(), request.getProjectFilePath());
             
-            // 参数校验
-            if (request.getProjectRoot() == null || request.getProjectRoot().trim().isEmpty()) {
-                return ApiResponse.error(400, "项目根目录不能为空");
-            }
-            if (request.getFilePath() == null || request.getFilePath().trim().isEmpty()) {
-                return ApiResponse.error(400, "文件路径不能为空");
+            // 删除操作其实只需要 projectFilePath，但为了接口统一，可能传了 absoluteFilePath
+            if (request.getProjectFilePath() == null || request.getProjectFilePath().trim().isEmpty()) {
+                return ApiResponse.error(400, "项目相对路径不能为空");
             }
             
             // 转换 classpath 和 sourcepath
@@ -146,17 +151,18 @@ public class CodeGraphController {
             
             // 调用服务处理文件删除
             incrementalUpdateService.handleFileDeleted(
-                request.getProjectRoot(),
-                request.getFilePath(),
+                request.getProjectName(),
+                request.getAbsoluteFilePath(), // 可能为 null，视情况而定
+                request.getProjectFilePath(),
                 classpathEntries,
                 sourcepathEntries
             );
             
-            log.info("文件节点删除成功: {}", request.getFilePath());
+            log.info("文件节点删除成功: {}", request.getProjectFilePath());
             return ApiResponse.success("文件节点删除成功", null);
             
         } catch (Exception e) {
-            log.error("删除文件节点失败: {}", request.getFilePath(), e);
+            log.error("删除文件节点失败: {}", request.getProjectFilePath(), e);
             return ApiResponse.error("删除文件节点失败: " + e.getMessage());
         }
     }
@@ -169,4 +175,3 @@ public class CodeGraphController {
         return ApiResponse.success("服务运行正常", "OK");
     }
 }
-

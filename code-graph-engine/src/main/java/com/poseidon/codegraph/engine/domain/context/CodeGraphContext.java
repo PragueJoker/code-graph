@@ -16,9 +16,34 @@ public class CodeGraphContext {
     // ========== 变更参数 ==========
     
     /**
-     * 项目根目录
+     * 项目名称
      */
-    private String projectRoot;
+    private String projectName;
+    
+    /**
+     * 文件绝对路径（用于读取内容）
+     */
+    private String absoluteFilePath;
+
+    public String getAbsoluteFilePath() {
+        // 领域逻辑：如果绝对路径为空，尝试使用当前工作目录 + 项目路径推导
+        if (this.absoluteFilePath == null || this.absoluteFilePath.trim().isEmpty()) {
+            if (this.projectFilePath != null && !this.projectFilePath.trim().isEmpty()) {
+                try {
+                    return java.nio.file.Path.of(System.getProperty("user.home"), this.projectFilePath)
+                        .toAbsolutePath().toString();
+                } catch (Exception e) {
+                    // 忽略异常，返回原始值
+                }
+            }
+        }
+        return this.absoluteFilePath;
+    }
+    
+    /**
+     * 项目文件路径（用于标识，相对于 Git 根）
+     */
+    private String projectFilePath;
     
     /**
      * classpath 条目
@@ -31,14 +56,14 @@ public class CodeGraphContext {
     private String[] sourcepathEntries;
     
     /**
-     * 旧文件路径
+     * 旧文件项目路径
      */
-    private String oldFilePath;
+    private String oldProjectFilePath;
     
     /**
-     * 新文件路径
+     * 新文件项目路径
      */
-    private String newFilePath;
+    private String newProjectFilePath;
     
     /**
      * 变更类型

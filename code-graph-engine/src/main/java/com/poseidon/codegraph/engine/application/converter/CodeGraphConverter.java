@@ -19,7 +19,7 @@ public class CodeGraphConverter {
         domain.setName(dobj.getName());
         domain.setQualifiedName(dobj.getQualifiedName());
         domain.setLanguage(dobj.getLanguage());
-        domain.setFilePath(dobj.getFilePath());
+        domain.setProjectFilePath(dobj.getProjectFilePath());
         domain.setPackagePath(dobj.getPackagePath());
         return domain;
     }
@@ -32,7 +32,7 @@ public class CodeGraphConverter {
         domain.setName(dobj.getName());
         domain.setQualifiedName(dobj.getQualifiedName());
         domain.setLanguage(dobj.getLanguage());
-        domain.setFilePath(dobj.getFilePath());
+        domain.setProjectFilePath(dobj.getProjectFilePath());
         domain.setStartLine(dobj.getStartLine());
         domain.setEndLine(dobj.getEndLine());
         domain.setUnitType(dobj.getUnitType());
@@ -50,7 +50,7 @@ public class CodeGraphConverter {
         domain.setName(dobj.getName());
         domain.setQualifiedName(dobj.getQualifiedName());
         domain.setLanguage(dobj.getLanguage());
-        domain.setFilePath(dobj.getFilePath());
+        domain.setProjectFilePath(dobj.getProjectFilePath());
         domain.setStartLine(dobj.getStartLine());
         domain.setEndLine(dobj.getEndLine());
         domain.setSignature(dobj.getSignature());
@@ -63,13 +63,34 @@ public class CodeGraphConverter {
         return domain;
     }
     
-    public static CallRelationship toDomain(CallRelationshipDO dobj) {
+    public static CodeRelationship toDomain(CodeRelationshipDO dobj) {
         if (dobj == null) return null;
         
-        CallRelationship domain = new CallRelationship();
+        CodeRelationship domain = new CodeRelationship();
         domain.setId(dobj.getId());
+        
+        // 优先使用通用字段
+        if (dobj.getFromNodeId() != null) {
+            domain.setFromNodeId(dobj.getFromNodeId());
+        } else if (dobj.getFromFunctionId() != null) {
+            domain.setFromNodeId(dobj.getFromFunctionId());
+        }
+        
+        if (dobj.getToNodeId() != null) {
+            domain.setToNodeId(dobj.getToNodeId());
+        } else if (dobj.getToFunctionId() != null) {
+            domain.setToNodeId(dobj.getToFunctionId());
+        }
+        
+        // 兼容性字段
         domain.setFromFunctionId(dobj.getFromFunctionId());
         domain.setToFunctionId(dobj.getToFunctionId());
+        
+        // 关系类型
+        if (dobj.getRelationshipType() != null) {
+            domain.setRelationshipType(RelationshipType.valueOf(dobj.getRelationshipType()));
+        }
+        
         domain.setLineNumber(dobj.getLineNumber());
         domain.setCallType(dobj.getCallType());
         domain.setLanguage(dobj.getLanguage());
@@ -86,7 +107,7 @@ public class CodeGraphConverter {
         dobj.setName(domain.getName());
         dobj.setQualifiedName(domain.getQualifiedName());
         dobj.setLanguage(domain.getLanguage());
-        dobj.setFilePath(domain.getFilePath());
+        dobj.setProjectFilePath(domain.getProjectFilePath());
         dobj.setPackagePath(domain.getPackagePath());
         return dobj;
     }
@@ -99,7 +120,7 @@ public class CodeGraphConverter {
         dobj.setName(domain.getName());
         dobj.setQualifiedName(domain.getQualifiedName());
         dobj.setLanguage(domain.getLanguage());
-        dobj.setFilePath(domain.getFilePath());
+        dobj.setProjectFilePath(domain.getProjectFilePath());
         dobj.setStartLine(domain.getStartLine());
         dobj.setEndLine(domain.getEndLine());
         dobj.setUnitType(domain.getUnitType());
@@ -117,7 +138,7 @@ public class CodeGraphConverter {
         dobj.setName(domain.getName());
         dobj.setQualifiedName(domain.getQualifiedName());
         dobj.setLanguage(domain.getLanguage());
-        dobj.setFilePath(domain.getFilePath());
+        dobj.setProjectFilePath(domain.getProjectFilePath());
         dobj.setStartLine(domain.getStartLine());
         dobj.setEndLine(domain.getEndLine());
         dobj.setSignature(domain.getSignature());
@@ -130,17 +151,28 @@ public class CodeGraphConverter {
         return dobj;
     }
     
-    public static CallRelationshipDO toDO(CallRelationship domain) {
+    public static CodeRelationshipDO toDO(CodeRelationship domain) {
         if (domain == null) return null;
         
-        CallRelationshipDO dobj = new CallRelationshipDO();
+        CodeRelationshipDO dobj = new CodeRelationshipDO();
         dobj.setId(domain.getId());
+        
+        // 通用字段
+        dobj.setFromNodeId(domain.getFromNodeId());
+        dobj.setToNodeId(domain.getToNodeId());
+        
+        // 兼容性字段
         dobj.setFromFunctionId(domain.getFromFunctionId());
         dobj.setToFunctionId(domain.getToFunctionId());
+        
+        // 关系类型
+        if (domain.getRelationshipType() != null) {
+            dobj.setRelationshipType(domain.getRelationshipType().name());
+        }
+        
         dobj.setLineNumber(domain.getLineNumber());
         dobj.setCallType(domain.getCallType());
         dobj.setLanguage(domain.getLanguage());
         return dobj;
     }
 }
-

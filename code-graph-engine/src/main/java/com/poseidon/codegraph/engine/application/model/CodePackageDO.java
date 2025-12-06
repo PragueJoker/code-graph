@@ -11,7 +11,7 @@ public class CodePackageDO {
     private String name;
     private String qualifiedName;
     private String language;
-    private String filePath;
+    private String projectFilePath;
     private String packagePath;
 }
 

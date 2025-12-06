@@ -22,27 +22,29 @@ public class ModifiedSourceProcessor extends AbstractChangeProcessor {
     
     @Override
     public void handle(CodeGraphContext context) {
-        String oldFilePath = context.getOldFilePath();
-        String newFilePath = context.getNewFilePath();
+        String oldProjectFilePath = context.getOldProjectFilePath();
+        String newProjectFilePath = context.getNewProjectFilePath();
+        String absoluteFilePath = context.getAbsoluteFilePath();
         
-        log.info("处理修改文件: {}", newFilePath);
+        log.info("处理修改文件: {}", newProjectFilePath);
         
         // 步骤 1：查找谁依赖我（入边）
-        List<String> dependentFiles = context.getReader().getFindWhoCallsMe().apply(oldFilePath);
+        List<String> dependentFiles = context.getReader().getFindWhoCallsMe().apply(oldProjectFilePath);
         log.debug("找到依赖文件: {} 个", dependentFiles.size());
         
         // 步骤 2：触发级联变更（依赖我的文件）
         triggerCascadeChanges(context, dependentFiles);
         
         // 步骤 3：删除该文件的旧节点
-        List<CodeUnit> oldUnits = context.getReader().getFindUnitsByFilePath().apply(oldFilePath);
-        List<CodeFunction> oldFunctions = context.getReader().getFindFunctionsByFilePath().apply(oldFilePath);
+        List<CodeUnit> oldUnits = context.getReader().getFindUnitsByProjectFilePath().apply(oldProjectFilePath);
+        List<CodeFunction> oldFunctions = context.getReader().getFindFunctionsByProjectFilePath().apply(oldProjectFilePath);
         
         deleteNodes(oldUnits, oldFunctions, context);
         log.debug("删除旧节点: {} 个", oldUnits.size() + oldFunctions.size());
         
         // 步骤 4：解析新文件
-        CodeGraph newGraph = parseFile(context, newFilePath);
+        // 注意：这里我们使用 absoluteFilePath 来读取文件内容，使用 newProjectFilePath 作为节点标识
+        CodeGraph newGraph = parseFile(context, absoluteFilePath, newProjectFilePath);
         log.debug("解析新文件: {} 个类, {} 个方法", newGraph.getUnitsAsList().size(), newGraph.getFunctionsAsList().size());
         
         // 步骤 5：保存新节点
@@ -50,8 +52,7 @@ public class ModifiedSourceProcessor extends AbstractChangeProcessor {
         log.debug("保存新节点完成");
         
         // 步骤 6：重建当前文件的调用关系
-        int relationshipCount = rebuildFileCallRelationships(context, newFilePath, newGraph);
+        int relationshipCount = rebuildFileCallRelationships(context, absoluteFilePath, newProjectFilePath, newGraph);
         log.debug("重建当前文件调用关系: {} 条", relationshipCount);
     }
 }
-

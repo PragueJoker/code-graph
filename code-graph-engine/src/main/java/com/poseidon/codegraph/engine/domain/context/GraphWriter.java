@@ -1,6 +1,6 @@
 package com.poseidon.codegraph.engine.domain.context;
 
-import com.poseidon.codegraph.engine.domain.model.CallRelationship;
+import com.poseidon.codegraph.engine.domain.model.CodeRelationship;
 import com.poseidon.codegraph.engine.domain.model.CodeFunction;
 import com.poseidon.codegraph.engine.domain.model.CodePackage;
 import com.poseidon.codegraph.engine.domain.model.CodeUnit;
@@ -19,7 +19,7 @@ public class GraphWriter {
     
     /**
      * 删除文件的出边
-     * Input: filePath
+     * Input: projectFilePath
      */
     private Consumer<String> deleteFileOutgoingCalls;
     
@@ -47,9 +47,9 @@ public class GraphWriter {
     private Consumer<CodeFunction> saveFunction;
     
     /**
-     * 保存调用关系
+     * 保存关系
      */
-    private Consumer<CallRelationship> saveCallRelationship;
+    private Consumer<CodeRelationship> saveRelationship;
     
     // ========== 批量插入函数 ==========
     
@@ -69,9 +69,9 @@ public class GraphWriter {
     private Consumer<java.util.List<CodePackage>> insertPackagesBatch;
     
     /**
-     * 批量插入调用关系（纯数据库操作）
+     * 批量插入关系（包括调用关系、结构关系等）（纯数据库操作）
      */
-    private Consumer<java.util.List<CallRelationship>> insertCallRelationshipsBatch;
+    private Consumer<java.util.List<CodeRelationship>> insertRelationshipsBatch;
     
     // ========== 批量更新函数 ==========
     
@@ -91,7 +91,7 @@ public class GraphWriter {
     private Consumer<java.util.List<CodePackage>> updatePackagesBatch;
     
     /**
-     * 批量更新调用关系（纯数据库操作）
+     * 批量更新关系（包括调用关系、结构关系等）（纯数据库操作）
      */
-    private Consumer<java.util.List<CallRelationship>> updateCallRelationshipsBatch;
+    private Consumer<java.util.List<CodeRelationship>> updateRelationshipsBatch;
 }

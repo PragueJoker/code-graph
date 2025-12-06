@@ -1,6 +1,6 @@
 package com.poseidon.codegraph.engine.domain.parser;
 
-import com.poseidon.codegraph.engine.domain.model.CallRelationship;
+import com.poseidon.codegraph.engine.domain.model.CodeRelationship;
 import com.poseidon.codegraph.engine.domain.model.CodeFunction;
 import com.poseidon.codegraph.engine.domain.model.CodeGraph;
 import com.poseidon.codegraph.engine.domain.model.CodePackage;
@@ -16,36 +16,46 @@ public interface SourceCodeParser {
     
     /**
      * 解析源文件，返回完整的代码图谱
-     * @param filePath 文件路径
+     * @param absoluteFilePath 文件绝对路径（用于读取）
+     * @param projectName 项目名称（用于生成唯一 ID）
+     * @param projectFilePath 项目相对路径（用于节点属性）
      * @return 解析出的代码图谱片段
      */
-    CodeGraph parse(String filePath);
+    CodeGraph parse(String absoluteFilePath, String projectName, String projectFilePath);
 
     /**
      * 仅解析包（package 声明）
-     * @param filePath 文件路径
+     * @param absoluteFilePath 文件绝对路径
+     * @param projectName 项目名称
+     * @param projectFilePath 项目相对路径
      * @return 包列表（通常一个文件只有一个包）
      */
-    List<CodePackage> parsePackages(String filePath);
+    List<CodePackage> parsePackages(String absoluteFilePath, String projectName, String projectFilePath);
 
     /**
      * 仅解析单元（类、接口、枚举等定义）
-     * @param filePath 文件路径
+     * @param absoluteFilePath 文件绝对路径
+     * @param projectName 项目名称
+     * @param projectFilePath 项目相对路径
      * @return 单元列表
      */
-    List<CodeUnit> parseUnits(String filePath);
+    List<CodeUnit> parseUnits(String absoluteFilePath, String projectName, String projectFilePath);
 
     /**
      * 仅解析函数（方法定义）
-     * @param filePath 文件路径
+     * @param absoluteFilePath 文件绝对路径
+     * @param projectName 项目名称
+     * @param projectFilePath 项目相对路径
      * @return 函数列表
      */
-    List<CodeFunction> parseFunctions(String filePath);
+    List<CodeFunction> parseFunctions(String absoluteFilePath, String projectName, String projectFilePath);
 
     /**
-     * 仅解析调用关系
-     * @param filePath 文件路径
-     * @return 调用关系列表
+     * 仅解析关系（包括调用关系、结构关系等）
+     * @param absoluteFilePath 文件绝对路径
+     * @param projectName 项目名称
+     * @param projectFilePath 项目相对路径
+     * @return 关系列表
      */
-    List<CallRelationship> parseRelationships(String filePath);
+    List<CodeRelationship> parseRelationships(String absoluteFilePath, String projectName, String projectFilePath);
 }
