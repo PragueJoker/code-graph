@@ -57,4 +57,11 @@ public class GraphReader {
      * Input: List<qualifiedName> -> Output: Set<existingQualifiedName>
      */
     private Function<java.util.List<String>, java.util.Set<String>> findExistingPackagesByQualifiedNames;
+    
+    /**
+     * 批量查询结构关系是否存在
+     * Input: List<CodeRelationshipDO> -> Output: Set<relationshipKey>
+     * relationshipKey 格式：fromNodeId:toNodeId:relType
+     */
+    private Function<java.util.List<com.poseidon.codegraph.engine.application.model.CodeRelationshipDO>, java.util.Set<String>> findExistingStructureRelationships;
 }

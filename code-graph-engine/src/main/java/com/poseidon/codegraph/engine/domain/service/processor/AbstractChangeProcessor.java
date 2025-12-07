@@ -178,12 +178,39 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
     }
     
     /**
-     * 批量保存结构关系：直接插入（结构关系是稳定的，通常不会重复）
+     * 批量保存结构关系：先查询存在性，再分离插入
      */
     private void saveStructureRelationshipsWithCheck(java.util.List<CodeRelationship> relationships, CodeGraphContext context) {
-        // 结构关系通常是新创建的，直接批量插入即可
-        context.getWriter().getInsertRelationshipsBatch().accept(relationships);
-        log.info("批量插入结构关系: count={}", relationships.size());
+        if (relationships.isEmpty()) {
+            return;
+        }
+        
+        // 查询哪些结构关系已存在
+        java.util.List<com.poseidon.codegraph.engine.application.model.CodeRelationshipDO> relationshipDOs = relationships.stream()
+            .map(com.poseidon.codegraph.engine.application.converter.CodeGraphConverter::toDO)
+            .collect(java.util.stream.Collectors.toList());
+        
+        java.util.Set<String> existingKeys = context.getReader().getFindExistingStructureRelationships() != null
+            ? context.getReader().getFindExistingStructureRelationships().apply(relationshipDOs)
+            : new java.util.HashSet<>();
+        
+        // 分离需要插入的关系
+        java.util.List<CodeRelationship> toInsert = new java.util.ArrayList<>();
+        
+        for (CodeRelationship rel : relationships) {
+            String key = rel.getFromNodeId() + ":" + rel.getToNodeId() + ":" + rel.getRelationshipType();
+            if (!existingKeys.contains(key)) {
+                toInsert.add(rel);
+            }
+        }
+        
+        // 批量插入新关系（结构关系不需要更新，因为没有可变属性）
+        if (!toInsert.isEmpty()) {
+            context.getWriter().getInsertRelationshipsBatch().accept(toInsert);
+            log.info("批量插入结构关系: count={}", toInsert.size());
+        } else {
+            log.debug("所有结构关系已存在，跳过插入");
+        }
     }
     
     protected void deleteNodes(List<CodeUnit> units, List<CodeFunction> fileFunctions, 

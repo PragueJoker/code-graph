@@ -183,6 +183,10 @@ public class IncrementalUpdateService {
             packageRepository.findExistingPackagesByQualifiedNames(qualifiedNames)
         );
         
+        context.getReader().setFindExistingStructureRelationships(relationships -> 
+            relationshipRepository.findExistingStructureRelationships(relationships)
+        );
+        
         // ========== 修改函数 (Writer) ==========
         
         context.getWriter().setDeleteFileOutgoingCalls(path -> 

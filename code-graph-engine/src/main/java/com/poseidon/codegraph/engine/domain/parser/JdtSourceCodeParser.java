@@ -90,7 +90,6 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
     }
     
     @Override
-    @Override
     public CodeGraph parse(String absoluteFilePath, String projectName, String projectFilePath,
                           String gitRepoUrl, String gitBranch) {
         log.info("开始解析代码图谱: absoluteFile={}, projectFile={}, git={}/{}", 
@@ -172,7 +171,7 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
         String packageName = extractPackageName(cu);
         if (packageName != null && !packageName.isEmpty()) {
             CodePackage pkg = new CodePackage();
-            pkg.setId(projectName + ":" + packageName);
+            pkg.setId(packageName);
             pkg.setName(packageName);
             pkg.setQualifiedName(packageName);
             pkg.setPackagePath(packageName.replace('.', '/'));
@@ -216,7 +215,7 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
         }
         
         unit.setQualifiedName(binding.getQualifiedName());
-        unit.setId(projectName + ":" + unit.getQualifiedName());
+        unit.setId(unit.getQualifiedName());
         unit.setUnitType(typeDecl.isInterface() ? "interface" : "class");
         
         int modifiers = typeDecl.getModifiers();
@@ -250,7 +249,7 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
         }
         
         unit.setQualifiedName(binding.getQualifiedName());
-        unit.setId(projectName + ":" + unit.getQualifiedName());
+        unit.setId(unit.getQualifiedName());
         unit.setUnitType("enum");
         unit.setModifiers(extractModifiers(enumDecl.getModifiers()));
         unit.setIsAbstract(false);
@@ -276,7 +275,7 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
         }
         
         unit.setQualifiedName(binding.getQualifiedName());
-        unit.setId(projectName + ":" + unit.getQualifiedName());
+        unit.setId(unit.getQualifiedName());
         unit.setUnitType("annotation");
         unit.setModifiers(extractModifiers(annoDecl.getModifiers()));
         unit.setIsAbstract(false);
@@ -297,7 +296,7 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
         
         String qualifiedName = unit.getQualifiedName() + "." + signature;
         function.setQualifiedName(qualifiedName);
-        function.setId(projectName + ":" + qualifiedName);
+        function.setId(qualifiedName);
         
         IMethodBinding binding = method.resolveBinding();
         if (binding == null) {
@@ -370,18 +369,12 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
                 rel.setId(UUID.randomUUID().toString());
                 
                 String callerQualifiedName = buildQualifiedName(callerBinding);
-                String fromNodeId = projectName + ":" + callerQualifiedName;
+                String fromNodeId = callerQualifiedName;
                 rel.setFromNodeId(fromNodeId);
                 rel.setFromFunctionId(fromNodeId);
                 
                 String targetQualifiedName = buildQualifiedName(targetBinding);
-                String toNodeId;
-                
-                if (targetBinding.getDeclaringClass() != null && targetBinding.getDeclaringClass().isFromSource()) {
-                    toNodeId = projectName + ":" + targetQualifiedName;
-                } else {
-                    toNodeId = targetQualifiedName;
-                }
+                String toNodeId = targetQualifiedName;
                 
                 rel.setToNodeId(toNodeId);
                 rel.setToFunctionId(toNodeId);

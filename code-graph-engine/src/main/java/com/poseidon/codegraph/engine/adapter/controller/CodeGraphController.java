@@ -24,61 +24,6 @@ public class CodeGraphController {
     }
     
     /**
-     * 创建文件的所有节点
-     * 解析指定文件，创建所有代码节点（Package、Unit、Function）和调用关系
-     * 
-     * @param request 创建文件节点请求
-     * @return API 响应
-     */
-    @PostMapping("/files/nodes")
-    public ApiResponse<Void> createFileNodes(@RequestBody CreateFileNodesRequest request) {
-        try {
-            log.info("创建文件节点请求: projectName={}, absoluteFile={}, projectFile={}", 
-                request.getProjectName(), request.getAbsoluteFilePath(), request.getProjectFilePath());
-            
-            // 参数校验
-            if (request.getAbsoluteFilePath() == null || request.getAbsoluteFilePath().trim().isEmpty()) {
-                return ApiResponse.error(400, "文件绝对路径不能为空");
-            }
-            if (request.getProjectFilePath() == null || request.getProjectFilePath().trim().isEmpty()) {
-                return ApiResponse.error(400, "项目相对路径不能为空");
-            }
-            // projectName 允许为空吗？建议必填，用于ID唯一性
-            if (request.getProjectName() == null || request.getProjectName().trim().isEmpty()) {
-                // 为了兼容性，如果没有传 projectName，可以暂定为空字符串或 default
-                // 但根据设计要求，应该必填
-                // return ApiResponse.error(400, "项目名称不能为空");
-            }
-            
-            // 转换 classpath 和 sourcepath
-            String[] classpathEntries = request.getClasspathEntries() != null 
-                ? request.getClasspathEntries().toArray(new String[0])
-                : new String[0];
-            String[] sourcepathEntries = request.getSourcepathEntries() != null
-                ? request.getSourcepathEntries().toArray(new String[0])
-                : new String[0];
-            
-            // 调用服务处理文件新增
-            incrementalUpdateService.handleFileAdded(
-                request.getProjectName(),
-                request.getAbsoluteFilePath(),
-                request.getProjectFilePath(),
-                request.getGitRepoUrl(),
-                request.getGitBranch(),
-                classpathEntries,
-                sourcepathEntries
-            );
-            
-            log.info("文件节点创建成功: {}", request.getProjectFilePath());
-            return ApiResponse.success("文件节点创建成功", null);
-            
-        } catch (Exception e) {
-            log.error("创建文件节点失败: {}", request.getProjectFilePath(), e);
-            return ApiResponse.error("创建文件节点失败: " + e.getMessage());
-        }
-    }
-    
-    /**
      * 更新文件的所有节点
      * 重新解析指定文件，更新所有代码节点和调用关系
      * 

@@ -38,5 +38,13 @@ public interface CodeRelationshipRepository {
      * 批量插入关系（包括调用关系、结构关系等）（纯数据库操作，不做存在性检查）
      */
     void insertRelationshipsBatch(List<CodeRelationshipDO> relationships);
+
+    /**
+     * 查询已存在的结构关系（PACKAGE_TO_UNIT, UNIT_TO_FUNCTION）
+     * 
+     * @param relationships 待检查的关系列表
+     * @return 已存在的关系 key 集合，key 格式为 "fromNodeId:toNodeId:relType"
+     */
+    java.util.Set<String> findExistingStructureRelationships(List<CodeRelationshipDO> relationships);
 }
 

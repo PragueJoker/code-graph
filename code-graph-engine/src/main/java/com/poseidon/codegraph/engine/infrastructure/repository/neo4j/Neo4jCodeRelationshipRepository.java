@@ -235,5 +235,39 @@ public class Neo4jCodeRelationshipRepository implements CodeRelationshipReposito
         map.put("language", relationship.getLanguage());
         return map;
     }
+
+    @Override
+    public java.util.Set<String> findExistingStructureRelationships(List<CodeRelationshipDO> relationships) {
+        if (relationships == null || relationships.isEmpty()) {
+            return new java.util.HashSet<>();
+        }
+        
+        // 构建查询条件：检查 (fromNodeId, toNodeId, relationshipType) 的组合是否存在
+        List<Map<String, Object>> relPairs = relationships.stream()
+            .map(rel -> {
+                Map<String, Object> pair = new HashMap<>();
+                pair.put("fromNodeId", rel.getFromNodeId());
+                pair.put("toNodeId", rel.getToNodeId());
+                pair.put("relationshipType", rel.getRelationshipType());
+                return pair;
+            })
+            .collect(Collectors.toList());
+        
+        String cypher = """
+            UNWIND $relPairs AS pair
+            MATCH (from)-[r]->(to)
+            WHERE from.id = pair.fromNodeId 
+              AND to.id = pair.toNodeId
+              AND type(r) = pair.relationshipType
+            RETURN pair.fromNodeId + ':' + pair.toNodeId + ':' + pair.relationshipType AS key
+            """;
+        
+        try (Session session = neo4jDriver.session()) {
+            return session.run(cypher, Values.parameters("relPairs", relPairs))
+                .stream()
+                .map(record -> record.get("key").asString())
+                .collect(Collectors.toSet());
+        }
+    }
 }
 
