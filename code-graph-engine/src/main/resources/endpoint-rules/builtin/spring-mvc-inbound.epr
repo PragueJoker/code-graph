@@ -1,0 +1,52 @@
+name: "Spring MVC Inbound"
+description: "解析 Spring MVC Controller 的 HTTP 入口端点"
+version: "1.0"
+enabled: true
+priority: 100
+type: "http-inbound"
+
+scope:
+  packageIncludes:
+    - "**.controller"
+    - "**.controller.**"
+    - "**.web"
+    - "**.web.**"
+  packageExcludes:
+    - "**.test.**"
+
+locate:
+  nodeType: "MethodDeclaration"
+  where:
+    - hasAnnotation:
+        nameMatches: "@(RequestMapping|GetMapping|PostMapping|PutMapping|DeleteMapping|PatchMapping)"
+
+extract:
+  httpMethod:
+    strategies:
+      # 策略1：从 @GetMapping/@PostMapping 等注解名提取方法
+      - tryConfig:
+          from: "method.annotation[.*Mapping$].name"
+          pattern: "(Get|Post|Put|Delete|Patch)Mapping"
+          captureGroup: 1
+          transform: "toUpperCase"
+        onSuccess: "return"
+      # 策略2：从 @RequestMapping 的 method 属性提取
+      - tryConfig:
+          from: "method.annotation[@RequestMapping].attribute[method]"
+          defaultValue: "GET"
+  
+  basePath:
+    from: "class.annotation[@RequestMapping].attribute[value]"
+    defaultValue: ""
+  
+  methodPath:
+    from: "method.annotation[.*Mapping$].attribute[value]"
+    defaultValue: ""
+  
+  path:
+    combine:
+      sources:
+        - source: "${basePath}"
+        - source: "${methodPath}"
+      normalize: true
+

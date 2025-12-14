@@ -44,9 +44,12 @@ public class ModifiedSourceProcessor extends AbstractChangeProcessor {
         // 步骤 3：删除该文件的旧节点
         List<CodeUnit> oldUnits = context.getReader().getFindUnitsByProjectFilePath().apply(oldProjectFilePath);
         List<CodeFunction> oldFunctions = context.getReader().getFindFunctionsByProjectFilePath().apply(oldProjectFilePath);
+        List<com.poseidon.codegraph.engine.domain.model.CodeEndpoint> oldEndpoints = 
+            context.getReader().getFindEndpointsByProjectFilePath().apply(oldProjectFilePath);
         
-        deleteNodes(oldUnits, oldFunctions, context);
-        log.debug("删除旧节点: {} 个", oldUnits.size() + oldFunctions.size());
+        log.info("准备删除旧节点: {} 个单元, {} 个方法, {} 个端点", oldUnits.size(), oldFunctions.size(), oldEndpoints.size());
+        deleteNodes(oldUnits, oldFunctions, oldEndpoints, context);
+        log.info("旧节点删除完成");
         
         // 步骤 4：解析新文件
         // 注意：这里我们使用 absoluteFilePath 来读取文件内容，使用 newProjectFilePath 作为节点标识

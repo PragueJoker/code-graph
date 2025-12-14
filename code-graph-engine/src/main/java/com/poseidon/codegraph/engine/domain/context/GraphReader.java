@@ -64,4 +64,16 @@ public class GraphReader {
      * relationshipKey 格式：fromNodeId:toNodeId:relType
      */
     private Function<java.util.List<com.poseidon.codegraph.engine.application.model.CodeRelationshipDO>, java.util.Set<String>> findExistingStructureRelationships;
+    
+    /**
+     * 查询已存在的端点
+     * 输入：端点ID列表，输出：已存在的端点ID集合
+     */
+    private Function<java.util.List<String>, java.util.Set<String>> findExistingEndpointsByIds;
+    
+    /**
+     * 查找文件的所有端点
+     * Input: projectFilePath -> Output: List<CodeEndpoint>
+     */
+    private Function<String, java.util.List<com.poseidon.codegraph.engine.domain.model.CodeEndpoint>> findEndpointsByProjectFilePath;
 }

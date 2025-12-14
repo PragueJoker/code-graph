@@ -97,6 +97,38 @@ public class CodeGraphConverter {
         return domain;
     }
     
+    public static CodeEndpoint toDomain(CodeEndpointDO dobj) {
+        if (dobj == null) return null;
+        
+        CodeEndpoint domain = new CodeEndpoint();
+        domain.setId(dobj.getId());
+        domain.setName(dobj.getName());
+        domain.setQualifiedName(dobj.getQualifiedName());
+        domain.setProjectFilePath(dobj.getProjectFilePath());
+        domain.setGitRepoUrl(dobj.getGitRepoUrl());
+        domain.setGitBranch(dobj.getGitBranch());
+        domain.setLanguage(dobj.getLanguage());
+        domain.setStartLine(dobj.getStartLine());
+        domain.setEndLine(dobj.getEndLine());
+        domain.setEndpointType(dobj.getEndpointType());
+        domain.setDirection(dobj.getDirection());
+        domain.setIsExternal(dobj.getIsExternal());
+        domain.setHttpMethod(dobj.getHttpMethod());
+        domain.setPath(dobj.getPath());
+        domain.setNormalizedPath(dobj.getNormalizedPath());
+        domain.setTopic(dobj.getTopic());
+        domain.setOperation(dobj.getOperation());
+        domain.setKeyPattern(dobj.getKeyPattern());
+        domain.setDataStructure(dobj.getDataStructure());
+        domain.setTableName(dobj.getTableName());
+        domain.setDbOperation(dobj.getDbOperation());
+        domain.setServiceName(dobj.getServiceName());
+        domain.setParseLevel(dobj.getParseLevel());
+        domain.setTargetService(dobj.getTargetService());
+        domain.setFunctionId(dobj.getFunctionId());
+        return domain;
+    }
+    
     // ========== 领域模型 -> DO ==========
     
     public static CodePackageDO toDO(CodePackage domain) {
@@ -173,6 +205,38 @@ public class CodeGraphConverter {
         dobj.setLineNumber(domain.getLineNumber());
         dobj.setCallType(domain.getCallType());
         dobj.setLanguage(domain.getLanguage());
+        return dobj;
+    }
+    
+    public static CodeEndpointDO toDO(CodeEndpoint domain) {
+        if (domain == null) return null;
+        
+        CodeEndpointDO dobj = new CodeEndpointDO();
+        dobj.setId(domain.getId());
+        dobj.setName(domain.getName());
+        dobj.setQualifiedName(domain.getQualifiedName());
+        dobj.setProjectFilePath(domain.getProjectFilePath());
+        dobj.setGitRepoUrl(domain.getGitRepoUrl());
+        dobj.setGitBranch(domain.getGitBranch());
+        dobj.setLanguage(domain.getLanguage());
+        dobj.setStartLine(domain.getStartLine());
+        dobj.setEndLine(domain.getEndLine());
+        dobj.setEndpointType(domain.getEndpointType());
+        dobj.setDirection(domain.getDirection());
+        dobj.setIsExternal(domain.getIsExternal());
+        dobj.setHttpMethod(domain.getHttpMethod());
+        dobj.setPath(domain.getPath());
+        dobj.setNormalizedPath(domain.getNormalizedPath());
+        dobj.setTopic(domain.getTopic());
+        dobj.setOperation(domain.getOperation());
+        dobj.setKeyPattern(domain.getKeyPattern());
+        dobj.setDataStructure(domain.getDataStructure());
+        dobj.setTableName(domain.getTableName());
+        dobj.setDbOperation(domain.getDbOperation());
+        dobj.setServiceName(domain.getServiceName());
+        dobj.setParseLevel(domain.getParseLevel());
+        dobj.setTargetService(domain.getTargetService());
+        dobj.setFunctionId(domain.getFunctionId());
         return dobj;
     }
 }

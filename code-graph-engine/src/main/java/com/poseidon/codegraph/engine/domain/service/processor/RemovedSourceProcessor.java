@@ -37,10 +37,12 @@ public class RemovedSourceProcessor extends AbstractChangeProcessor {
         // 步骤 2：查找该文件的所有节点
         List<CodeUnit> units = context.getReader().getFindUnitsByProjectFilePath().apply(projectFilePath);
         List<CodeFunction> fileFunctions = context.getReader().getFindFunctionsByProjectFilePath().apply(projectFilePath);
+        List<com.poseidon.codegraph.engine.domain.model.CodeEndpoint> endpoints = 
+            context.getReader().getFindEndpointsByProjectFilePath().apply(projectFilePath);
         
         // 步骤 3：删除所有节点（会自动删除所有相关的边）
-        deleteNodes(units, fileFunctions, context);
-        log.debug("删除节点: {} 个", units.size() + fileFunctions.size());
+        deleteNodes(units, fileFunctions, endpoints, context);
+        log.debug("删除节点: {} 个单元, {} 个方法, {} 个端点", units.size(), fileFunctions.size(), endpoints.size());
         
         // 步骤 4：触发级联变更
         triggerCascadeChanges(context, dependentFiles);

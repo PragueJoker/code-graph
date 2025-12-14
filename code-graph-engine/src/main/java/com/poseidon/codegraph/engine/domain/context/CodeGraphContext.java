@@ -1,7 +1,11 @@
 package com.poseidon.codegraph.engine.domain.context;
 
 import com.poseidon.codegraph.engine.domain.model.event.ChangeType;
+import com.poseidon.codegraph.engine.domain.parser.enricher.GraphEnricher;
 import lombok.Data;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 代码图谱上下文（领域层交互核心对象）
@@ -9,6 +13,7 @@ import lombok.Data;
  * 1. 变更数据（参数）
  * 2. 操作能力（Reader/Writer）
  * 3. 事件能力（Sender）
+ * 4. 增强器（Enrichers）
  */
 @Data
 public class CodeGraphContext {
@@ -46,6 +51,11 @@ public class CodeGraphContext {
     private String projectFilePath;
     
     /**
+     * 包名（从源码解析得到，用于端点解析等）
+     */
+    private String packageName;
+    
+    /**
      * Git 仓库 URL
      */
     private String gitRepoUrl;
@@ -79,6 +89,11 @@ public class CodeGraphContext {
      * 变更类型
      */
     private ChangeType changeType;
+    
+    /**
+     * 图谱增强器列表（用于端点解析等扩展功能）
+     */
+    private List<GraphEnricher> enrichers = new ArrayList<>();
     
     // ========== 操作能力 ==========
     

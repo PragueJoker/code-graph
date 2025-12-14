@@ -149,14 +149,14 @@ public class Neo4jCodeFunctionRepository implements CodeFunctionRepository {
     @Override
     public void deleteById(String id) {
         String cypher = """
-            MATCH (n:CodeFunction)
+            MATCH (n)
             WHERE n.id = $id
             DETACH DELETE n
             """;
         
         try (Session session = neo4jDriver.session()) {
             session.run(cypher, Values.parameters("id", id));
-            log.debug("删除函数: {}", id);
+            log.debug("删除节点: {}", id);
         }
     }
 

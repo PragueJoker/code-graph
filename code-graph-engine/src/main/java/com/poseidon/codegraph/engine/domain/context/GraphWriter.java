@@ -1,5 +1,6 @@
 package com.poseidon.codegraph.engine.domain.context;
 
+import com.poseidon.codegraph.engine.domain.model.CodeEndpoint;
 import com.poseidon.codegraph.engine.domain.model.CodeRelationship;
 import com.poseidon.codegraph.engine.domain.model.CodeFunction;
 import com.poseidon.codegraph.engine.domain.model.CodePackage;
@@ -67,4 +68,16 @@ public class GraphWriter {
      * 批量更新包（纯数据库操作）
      */
     private Consumer<java.util.List<CodePackage>> updatePackagesBatch;
+    
+    // ========== 端点操作 ==========
+    
+    /**
+     * 批量插入端点（纯数据库操作）
+     */
+    private Consumer<java.util.List<CodeEndpoint>> insertEndpointsBatch;
+    
+    /**
+     * 批量更新端点（纯数据库操作）
+     */
+    private Consumer<java.util.List<CodeEndpoint>> updateEndpointsBatch;
 }

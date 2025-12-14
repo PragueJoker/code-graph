@@ -29,10 +29,19 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
      * 创建绑定的解析器
      */
     protected SourceCodeParser createParser(CodeGraphContext context) {
-        return new JdtSourceCodeParser(
-            context.getClasspathEntries(),
-            context.getSourcepathEntries()
-        );
+        // 如果配置了增强器，传递给解析器
+        if (context.getEnrichers() != null && !context.getEnrichers().isEmpty()) {
+            return new JdtSourceCodeParser(
+                context.getClasspathEntries(),
+                context.getSourcepathEntries(),
+                context.getEnrichers()
+            );
+        } else {
+            return new JdtSourceCodeParser(
+                context.getClasspathEntries(),
+                context.getSourcepathEntries()
+            );
+        }
     }
     
     protected CodeGraph parseFile(CodeGraphContext context, String absoluteFilePath, String projectFilePath) {
@@ -66,11 +75,19 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
             saveFunctionsWithCheck(functions, context);
         }
         
-        // 4. 处理结构关系（BELONGS_TO）
+        // 4. 处理 Endpoints（端点）
+        java.util.List<CodeEndpoint> endpoints = graph.getEndpointsAsList();
+        if (!endpoints.isEmpty()) {
+            saveEndpointsWithCheck(endpoints, context);
+        }
+        
+        // 5. 处理结构关系（BELONGS_TO 和端点关系）
         java.util.List<CodeRelationship> allRelationships = graph.getRelationshipsAsList();
         java.util.List<CodeRelationship> structureRelationships = allRelationships.stream()
             .filter(rel -> rel.getRelationshipType() == RelationshipType.PACKAGE_TO_UNIT 
-                       || rel.getRelationshipType() == RelationshipType.UNIT_TO_FUNCTION)
+                       || rel.getRelationshipType() == RelationshipType.UNIT_TO_FUNCTION
+                       || rel.getRelationshipType() == RelationshipType.ENDPOINT_TO_FUNCTION
+                       || rel.getRelationshipType() == RelationshipType.FUNCTION_TO_ENDPOINT)
             .collect(java.util.stream.Collectors.toList());
         
         if (!structureRelationships.isEmpty()) {
@@ -178,6 +195,40 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
     }
     
     /**
+     * 批量保存端点：先查询存在性，然后分离插入/更新
+     */
+    private void saveEndpointsWithCheck(java.util.List<CodeEndpoint> endpoints, CodeGraphContext context) {
+        // 查询哪些端点已存在
+        java.util.List<String> endpointIds = endpoints.stream()
+            .map(CodeEndpoint::getId)
+            .collect(java.util.stream.Collectors.toList());
+        
+        java.util.Set<String> existingIds = context.getReader()
+            .getFindExistingEndpointsByIds()
+            .apply(endpointIds);
+        
+        // 分离需要插入和更新的端点
+        java.util.List<CodeEndpoint> toInsert = new java.util.ArrayList<>();
+        java.util.List<CodeEndpoint> toUpdate = new java.util.ArrayList<>();
+        
+        for (CodeEndpoint endpoint : endpoints) {
+            if (existingIds.contains(endpoint.getId())) {
+                toUpdate.add(endpoint);
+            } else {
+                toInsert.add(endpoint);
+            }
+        }
+        
+        // 批量插入和更新
+        if (!toInsert.isEmpty()) {
+            context.getWriter().getInsertEndpointsBatch().accept(toInsert);
+        }
+        if (!toUpdate.isEmpty()) {
+            context.getWriter().getUpdateEndpointsBatch().accept(toUpdate);
+        }
+    }
+    
+    /**
      * 批量保存结构关系：先查询存在性，再分离插入
      */
     private void saveStructureRelationshipsWithCheck(java.util.List<CodeRelationship> relationships, CodeGraphContext context) {
@@ -214,9 +265,11 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
     }
     
     protected void deleteNodes(List<CodeUnit> units, List<CodeFunction> fileFunctions, 
+                            List<com.poseidon.codegraph.engine.domain.model.CodeEndpoint> endpoints,
                             CodeGraphContext context) {
         units.forEach(unit -> context.getWriter().getDeleteNode().accept(unit.getId()));
         fileFunctions.forEach(func -> context.getWriter().getDeleteNode().accept(func.getId()));
+        endpoints.forEach(endpoint -> context.getWriter().getDeleteNode().accept(endpoint.getId()));
     }
     
     protected int rebuildFileCallRelationships(CodeGraphContext context, String absoluteFilePath, String projectFilePath,

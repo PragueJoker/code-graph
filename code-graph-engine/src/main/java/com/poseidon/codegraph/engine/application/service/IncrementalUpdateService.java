@@ -4,10 +4,12 @@ import com.poseidon.codegraph.engine.application.converter.CodeGraphConverter;
 import com.poseidon.codegraph.engine.application.repository.*;
 import com.poseidon.codegraph.engine.domain.context.CodeGraphContext;
 import com.poseidon.codegraph.engine.domain.model.event.ChangeType;
+import com.poseidon.codegraph.engine.domain.parser.enricher.GraphEnricher;
 import com.poseidon.codegraph.engine.domain.service.CodeGraphService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.stream.Collectors;
 
 /**
@@ -25,17 +27,26 @@ public class IncrementalUpdateService {
     private final CodeUnitRepository unitRepository;
     private final CodeFunctionRepository functionRepository;
     private final CodeRelationshipRepository relationshipRepository;
+    private final CodeEndpointRepository endpointRepository;
+    private final List<GraphEnricher> enrichers;
     
     public IncrementalUpdateService(
             CodePackageRepository packageRepository,
             CodeUnitRepository unitRepository,
             CodeFunctionRepository functionRepository,
-            CodeRelationshipRepository relationshipRepository) {
+            CodeRelationshipRepository relationshipRepository,
+            CodeEndpointRepository endpointRepository,
+            List<GraphEnricher> enrichers) {
         this.codeGraphService = new CodeGraphService();
         this.packageRepository = packageRepository;
         this.unitRepository = unitRepository;
         this.functionRepository = functionRepository;
         this.relationshipRepository = relationshipRepository;
+        this.endpointRepository = endpointRepository;
+        this.enrichers = enrichers;
+        
+        log.info("IncrementalUpdateService 初始化完成，已注入 {} 个增强器", 
+            enrichers != null ? enrichers.size() : 0);
     }
     
     /**
@@ -146,6 +157,7 @@ public class IncrementalUpdateService {
         context.setGitBranch(gitBranch);
         context.setClasspathEntries(classpathEntries);
         context.setSourcepathEntries(sourcepathEntries);
+        context.setEnrichers(enrichers);
         
         // ========== 查询函数 (Reader) ==========
         
@@ -185,6 +197,16 @@ public class IncrementalUpdateService {
         
         context.getReader().setFindExistingStructureRelationships(relationships -> 
             relationshipRepository.findExistingStructureRelationships(relationships)
+        );
+        
+        context.getReader().setFindExistingEndpointsByIds(ids -> 
+            endpointRepository.findExistingEndpointsByIds(ids)
+        );
+        
+        context.getReader().setFindEndpointsByProjectFilePath(path -> 
+            endpointRepository.findEndpointsByProjectFilePath(path).stream()
+                .map(CodeGraphConverter::toDomain)
+                .collect(Collectors.toList())
         );
         
         // ========== 修改函数 (Writer) ==========
@@ -254,6 +276,22 @@ public class IncrementalUpdateService {
         context.getWriter().setUpdateFunctionsBatch(functions -> 
             functionRepository.updateFunctionsBatch(
                 functions.stream()
+                    .map(CodeGraphConverter::toDO)
+                    .collect(Collectors.toList())
+            )
+        );
+        
+        context.getWriter().setInsertEndpointsBatch(endpoints -> 
+            endpointRepository.insertEndpointsBatch(
+                endpoints.stream()
+                    .map(CodeGraphConverter::toDO)
+                    .collect(Collectors.toList())
+            )
+        );
+        
+        context.getWriter().setUpdateEndpointsBatch(endpoints -> 
+            endpointRepository.updateEndpointsBatch(
+                endpoints.stream()
                     .map(CodeGraphConverter::toDO)
                     .collect(Collectors.toList())
             )

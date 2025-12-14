@@ -1,5 +1,7 @@
 package com.poseidon.codegraph.engine.domain.parser;
 
+import com.poseidon.codegraph.engine.domain.context.CodeGraphContext;
+import com.poseidon.codegraph.engine.domain.parser.enricher.GraphEnricher;
 import com.poseidon.codegraph.engine.domain.parser.filter.FilterPipeline;
 import com.poseidon.codegraph.engine.domain.parser.filter.GetterSetterFilter;
 import com.poseidon.codegraph.engine.domain.parser.filter.PackageWhitelistFilter;
@@ -33,6 +35,16 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
         super(new FilterPipeline()
             .addFilter(new GetterSetterFilter())
             .addFilter(new PackageWhitelistFilter(INTERNAL_PACKAGE_PREFIXES)));
+        this.classpathEntries = classpathEntries;
+        this.sourcepathEntries = sourcepathEntries;
+    }
+    
+    public JdtSourceCodeParser(String[] classpathEntries, String[] sourcepathEntries, 
+                              List<GraphEnricher> enrichers) {
+        super(new FilterPipeline()
+            .addFilter(new GetterSetterFilter())
+            .addFilter(new PackageWhitelistFilter(INTERNAL_PACKAGE_PREFIXES)),
+            enrichers);
         this.classpathEntries = classpathEntries;
         this.sourcepathEntries = sourcepathEntries;
     }
@@ -97,6 +109,9 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
         CodeGraph graph = new CodeGraph();
         CompilationUnit cu = createAST(absoluteFilePath);
         
+        // 提取包名
+        String packageName = extractPackageName(cu);
+        
         List<CodePackage> packages = parsePackages(cu, absoluteFilePath, projectName, projectFilePath);
         packages.forEach(pkg -> {
             pkg.setGitRepoUrl(gitRepoUrl);
@@ -134,7 +149,29 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
         
         log.info("代码图谱解析完成: file={}, packages={}, units={}, functions={}, relationships={}", 
                  projectFilePath, packages.size(), units.size(), functionCount, graph.getRelationshipsAsList().size());
+        
+        // 应用增强器（端点解析等）
+        CodeGraphContext context = buildEnrichmentContext(absoluteFilePath, projectName, 
+                                                          projectFilePath, gitRepoUrl, gitBranch, packageName);
+        applyEnrichers(graph, cu, context);
+        
         return graph;
+    }
+    
+    /**
+     * 构建增强上下文
+     */
+    private CodeGraphContext buildEnrichmentContext(String absoluteFilePath, String projectName,
+                                                     String projectFilePath, String gitRepoUrl,
+                                                     String gitBranch, String packageName) {
+        CodeGraphContext context = new CodeGraphContext();
+        context.setAbsoluteFilePath(absoluteFilePath);
+        context.setProjectName(projectName);
+        context.setProjectFilePath(projectFilePath);
+        context.setGitRepoUrl(gitRepoUrl);
+        context.setGitBranch(gitBranch);
+        context.setPackageName(packageName);
+        return context;
     }
     
     @Override

@@ -41,6 +41,12 @@
       <optional>true</optional>
     </dependency>
     
+    <!-- Jackson YAML -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-yaml</artifactId>
+    </dependency>
+    
     <!-- Spring Data Neo4j -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

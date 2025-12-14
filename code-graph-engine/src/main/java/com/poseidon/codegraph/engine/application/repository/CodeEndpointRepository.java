@@ -1,0 +1,40 @@
+package com.poseidon.codegraph.engine.application.repository;
+
+import com.poseidon.codegraph.engine.application.model.CodeEndpointDO;
+
+import java.util.List;
+import java.util.Set;
+
+/**
+ * 端点仓储接口
+ */
+public interface CodeEndpointRepository {
+    
+    /**
+     * 批量插入端点
+     */
+    void insertEndpointsBatch(List<CodeEndpointDO> endpoints);
+    
+    /**
+     * 批量更新端点
+     */
+    void updateEndpointsBatch(List<CodeEndpointDO> endpoints);
+    
+    /**
+     * 根据 ID 删除端点
+     */
+    void deleteById(String id);
+    
+    /**
+     * 查询哪些端点已存在
+     * @param ids 端点ID列表
+     * @return 已存在的端点ID集合
+     */
+    Set<String> findExistingEndpointsByIds(List<String> ids);
+    
+    /**
+     * 根据项目文件路径查找端点
+     */
+    List<CodeEndpointDO> findEndpointsByProjectFilePath(String projectFilePath);
+}
+

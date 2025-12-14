@@ -113,6 +113,8 @@ public class Neo4jCodeRelationshipRepository implements CodeRelationshipReposito
         List<CodeRelationshipDO> calls = new ArrayList<>();
         List<CodeRelationshipDO> packageToUnit = new ArrayList<>();
         List<CodeRelationshipDO> unitToFunction = new ArrayList<>();
+        List<CodeRelationshipDO> endpointToFunction = new ArrayList<>();
+        List<CodeRelationshipDO> functionToEndpoint = new ArrayList<>();
         
         for (CodeRelationshipDO rel : relationships) {
             String type = rel.getRelationshipType();
@@ -122,6 +124,10 @@ public class Neo4jCodeRelationshipRepository implements CodeRelationshipReposito
                 packageToUnit.add(rel);
             } else if ("UNIT_TO_FUNCTION".equals(type)) {
                 unitToFunction.add(rel);
+            } else if ("ENDPOINT_TO_FUNCTION".equals(type)) {
+                endpointToFunction.add(rel);
+            } else if ("FUNCTION_TO_ENDPOINT".equals(type)) {
+                functionToEndpoint.add(rel);
             }
         }
         
@@ -201,8 +207,59 @@ public class Neo4jCodeRelationshipRepository implements CodeRelationshipReposito
             }
         }
         
-        log.info("批量插入关系完成: total={}, CALLS={}, PACKAGE_TO_UNIT={}, UNIT_TO_FUNCTION={}", 
-                 relationships.size(), calls.size(), packageToUnit.size(), unitToFunction.size());
+        // 批量插入 ENDPOINT_TO_FUNCTION 关系
+        if (!endpointToFunction.isEmpty()) {
+            String cypher = """
+                UNWIND $relationships AS rel
+                MATCH (from:CodeEndpoint {id: rel.fromNodeId})
+                MATCH (to:CodeFunction {id: rel.toNodeId})
+                CREATE (from)-[r:ENDPOINT_TO_FUNCTION]->(to)
+                SET r.id = rel.id,
+                    r.relationshipType = rel.relationshipType,
+                    r.language = rel.language
+                """;
+            
+            List<Map<String, Object>> params = endpointToFunction.stream()
+                .map(this::relationshipToMap)
+                .collect(Collectors.toList());
+            
+            try (Session session = neo4jDriver.session()) {
+                session.run(cypher, Values.parameters("relationships", params));
+                log.info("批量插入 ENDPOINT_TO_FUNCTION 关系成功: count={}", endpointToFunction.size());
+            } catch (Exception e) {
+                log.error("批量插入 ENDPOINT_TO_FUNCTION 关系失败: count={}, error={}", endpointToFunction.size(), e.getMessage(), e);
+                throw new RuntimeException("批量插入 ENDPOINT_TO_FUNCTION 关系失败", e);
+            }
+        }
+        
+        // 批量插入 FUNCTION_TO_ENDPOINT 关系
+        if (!functionToEndpoint.isEmpty()) {
+            String cypher = """
+                UNWIND $relationships AS rel
+                MATCH (from:CodeFunction {id: rel.fromNodeId})
+                MATCH (to:CodeEndpoint {id: rel.toNodeId})
+                CREATE (from)-[r:FUNCTION_TO_ENDPOINT]->(to)
+                SET r.id = rel.id,
+                    r.relationshipType = rel.relationshipType,
+                    r.language = rel.language
+                """;
+            
+            List<Map<String, Object>> params = functionToEndpoint.stream()
+                .map(this::relationshipToMap)
+                .collect(Collectors.toList());
+            
+            try (Session session = neo4jDriver.session()) {
+                session.run(cypher, Values.parameters("relationships", params));
+                log.info("批量插入 FUNCTION_TO_ENDPOINT 关系成功: count={}", functionToEndpoint.size());
+            } catch (Exception e) {
+                log.error("批量插入 FUNCTION_TO_ENDPOINT 关系失败: count={}, error={}", functionToEndpoint.size(), e.getMessage(), e);
+                throw new RuntimeException("批量插入 FUNCTION_TO_ENDPOINT 关系失败", e);
+            }
+        }
+        
+        log.info("批量插入关系完成: total={}, CALLS={}, PACKAGE_TO_UNIT={}, UNIT_TO_FUNCTION={}, ENDPOINT_TO_FUNCTION={}, FUNCTION_TO_ENDPOINT={}", 
+                 relationships.size(), calls.size(), packageToUnit.size(), unitToFunction.size(), 
+                 endpointToFunction.size(), functionToEndpoint.size());
     }
 
     private Map<String, Object> relationshipToMap(CodeRelationshipDO relationship) {

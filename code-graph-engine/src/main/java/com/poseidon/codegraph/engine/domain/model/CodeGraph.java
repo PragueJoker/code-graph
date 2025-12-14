@@ -32,6 +32,11 @@ public class CodeGraph {
     private List<CodeRelationship> relationships = new ArrayList<>();
     
     /**
+     * 端点列表（HTTP API、Kafka、Redis、DB 等外部交互点）
+     */
+    private List<CodeEndpoint> endpoints = new ArrayList<>();
+    
+    /**
      * 添加包
      */
     public void addPackage(CodePackage pkg) {
@@ -72,6 +77,16 @@ public class CodeGraph {
     }
     
     /**
+     * 添加端点
+     */
+    public void addEndpoint(CodeEndpoint endpoint) {
+        if (this.endpoints == null) {
+            this.endpoints = new ArrayList<>();
+        }
+        this.endpoints.add(endpoint);
+    }
+    
+    /**
      * 获取包列表
      */
     public List<CodePackage> getPackagesAsList() {
@@ -97,6 +112,13 @@ public class CodeGraph {
      */
     public List<CodeRelationship> getRelationshipsAsList() {
         return this.relationships != null ? this.relationships : new ArrayList<>();
+    }
+    
+    /**
+     * 获取端点列表
+     */
+    public List<CodeEndpoint> getEndpointsAsList() {
+        return this.endpoints != null ? this.endpoints : new ArrayList<>();
     }
 }
 
