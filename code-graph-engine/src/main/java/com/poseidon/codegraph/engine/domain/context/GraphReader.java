@@ -6,7 +6,6 @@ import com.poseidon.codegraph.engine.domain.model.FileMetadata;
 import lombok.Data;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Function;
 
 /**

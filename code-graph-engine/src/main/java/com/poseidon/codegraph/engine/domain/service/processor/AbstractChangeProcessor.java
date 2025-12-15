@@ -8,7 +8,6 @@ import com.poseidon.codegraph.engine.domain.parser.SourceCodeParser;
 import com.poseidon.codegraph.engine.domain.parser.JdtSourceCodeParser;
 import lombok.extern.slf4j.Slf4j;
 
-import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -297,8 +296,8 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
         // 批量查询：收集所有需要检查的节点ID
         java.util.Set<String> nodeIds = new java.util.HashSet<>();
         for (CodeRelationship rel : callRelationships) {
-            nodeIds.add(rel.getFromFunctionId());
-            nodeIds.add(rel.getToFunctionId());
+            nodeIds.add(rel.getFromNodeId());
+            nodeIds.add(rel.getToNodeId());
         }
         
         log.debug("收集到 {} 个需要检查的节点ID", nodeIds.size());

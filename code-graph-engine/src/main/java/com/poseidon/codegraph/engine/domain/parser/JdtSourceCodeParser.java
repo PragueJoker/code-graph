@@ -408,13 +408,10 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
                 String callerQualifiedName = buildQualifiedName(callerBinding);
                 String fromNodeId = callerQualifiedName;
                 rel.setFromNodeId(fromNodeId);
-                rel.setFromFunctionId(fromNodeId);
                 
                 String targetQualifiedName = buildQualifiedName(targetBinding);
                 String toNodeId = targetQualifiedName;
-                
                 rel.setToNodeId(toNodeId);
-                rel.setToFunctionId(toNodeId);
                 
                 rel.setRelationshipType(RelationshipType.CALLS);
                 rel.setLineNumber(lineNumber);

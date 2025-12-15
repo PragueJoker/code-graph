@@ -48,35 +48,5 @@ public class CodeRelationship {
      * 语言
      */
     private String language;
-    
-    // ========== 兼容性方法（保持向后兼容） ==========
-    
-    /**
-     * 获取调用方函数 ID（兼容性方法，仅用于 CALLS 关系）
-     */
-    public String getFromFunctionId() {
-        return fromNodeId;
-    }
-    
-    /**
-     * 设置调用方函数 ID（兼容性方法，仅用于 CALLS 关系）
-     */
-    public void setFromFunctionId(String fromFunctionId) {
-        this.fromNodeId = fromFunctionId;
-    }
-    
-    /**
-     * 获取被调用方函数 ID（兼容性方法，仅用于 CALLS 关系）
-     */
-    public String getToFunctionId() {
-        return toNodeId;
-    }
-    
-    /**
-     * 设置被调用方函数 ID（兼容性方法，仅用于 CALLS 关系）
-     */
-    public void setToFunctionId(String toFunctionId) {
-        this.toNodeId = toFunctionId;
-    }
 }
 

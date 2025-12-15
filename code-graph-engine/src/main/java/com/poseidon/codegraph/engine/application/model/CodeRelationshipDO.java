@@ -26,16 +26,6 @@ public class CodeRelationshipDO {
     private String relationshipType;
     
     /**
-     * 调用方函数 ID（兼容性字段，仅用于 CALLS 关系）
-     */
-    private String fromFunctionId;
-    
-    /**
-     * 被调用方函数 ID（兼容性字段，仅用于 CALLS 关系）
-     */
-    private String toFunctionId;
-    
-    /**
      * 调用位置行号（仅用于 CALLS 关系）
      */
     private Integer lineNumber;

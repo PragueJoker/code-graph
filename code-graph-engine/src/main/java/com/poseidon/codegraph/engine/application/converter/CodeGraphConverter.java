@@ -68,23 +68,8 @@ public class CodeGraphConverter {
         
         CodeRelationship domain = new CodeRelationship();
         domain.setId(dobj.getId());
-        
-        // 优先使用通用字段
-        if (dobj.getFromNodeId() != null) {
-            domain.setFromNodeId(dobj.getFromNodeId());
-        } else if (dobj.getFromFunctionId() != null) {
-            domain.setFromNodeId(dobj.getFromFunctionId());
-        }
-        
-        if (dobj.getToNodeId() != null) {
-            domain.setToNodeId(dobj.getToNodeId());
-        } else if (dobj.getToFunctionId() != null) {
-            domain.setToNodeId(dobj.getToFunctionId());
-        }
-        
-        // 兼容性字段
-        domain.setFromFunctionId(dobj.getFromFunctionId());
-        domain.setToFunctionId(dobj.getToFunctionId());
+        domain.setFromNodeId(dobj.getFromNodeId());
+        domain.setToNodeId(dobj.getToNodeId());
         
         // 关系类型
         if (dobj.getRelationshipType() != null) {
@@ -188,14 +173,8 @@ public class CodeGraphConverter {
         
         CodeRelationshipDO dobj = new CodeRelationshipDO();
         dobj.setId(domain.getId());
-        
-        // 通用字段
         dobj.setFromNodeId(domain.getFromNodeId());
         dobj.setToNodeId(domain.getToNodeId());
-        
-        // 兼容性字段
-        dobj.setFromFunctionId(domain.getFromFunctionId());
-        dobj.setToFunctionId(domain.getToFunctionId());
         
         // 关系类型
         if (domain.getRelationshipType() != null) {
