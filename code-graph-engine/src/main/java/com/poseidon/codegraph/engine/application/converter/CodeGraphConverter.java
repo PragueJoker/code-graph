@@ -110,7 +110,7 @@ public class CodeGraphConverter {
         domain.setServiceName(dobj.getServiceName());
         domain.setParseLevel(dobj.getParseLevel());
         domain.setTargetService(dobj.getTargetService());
-        domain.setFunctionId(dobj.getFunctionId());
+        // functionId 是临时字段，不从 DO 转换
         return domain;
     }
     
@@ -215,7 +215,7 @@ public class CodeGraphConverter {
         dobj.setServiceName(domain.getServiceName());
         dobj.setParseLevel(domain.getParseLevel());
         dobj.setTargetService(domain.getTargetService());
-        dobj.setFunctionId(domain.getFunctionId());
+        // functionId 是临时字段，不转换到 DO
         return dobj;
     }
 }

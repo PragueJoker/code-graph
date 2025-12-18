@@ -194,11 +194,23 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
     }
     
     /**
-     * 批量保存端点：先查询存在性，然后分离插入/更新
+     * 批量保存端点：先去重，再查询存在性，最后只插入新端点
+     * 注意：端点属性稳定，不需要更新已存在的端点
      */
     private void saveEndpointsWithCheck(java.util.List<CodeEndpoint> endpoints, CodeGraphContext context) {
-        // 查询哪些端点已存在
-        java.util.List<String> endpointIds = endpoints.stream()
+        // 1. 先按 ID 去重（同一次解析中，相同 ID 的端点只保留第一个）
+        java.util.Map<String, CodeEndpoint> uniqueEndpoints = new java.util.LinkedHashMap<>();
+        for (CodeEndpoint endpoint : endpoints) {
+            uniqueEndpoints.putIfAbsent(endpoint.getId(), endpoint);
+        }
+        
+        java.util.List<CodeEndpoint> deduplicatedEndpoints = new java.util.ArrayList<>(uniqueEndpoints.values());
+        
+        log.info("端点去重：原始 {} 个，去重后 {} 个", 
+            endpoints.size(), deduplicatedEndpoints.size());
+        
+        // 2. 查询哪些端点已在数据库中存在
+        java.util.List<String> endpointIds = deduplicatedEndpoints.stream()
             .map(CodeEndpoint::getId)
             .collect(java.util.stream.Collectors.toList());
         
@@ -206,25 +218,18 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
             .getFindExistingEndpointsByIds()
             .apply(endpointIds);
         
-        // 分离需要插入和更新的端点
-        java.util.List<CodeEndpoint> toInsert = new java.util.ArrayList<>();
-        java.util.List<CodeEndpoint> toUpdate = new java.util.ArrayList<>();
+        // 3. 只插入不存在的端点（跳过已存在的）
+        java.util.List<CodeEndpoint> toInsert = deduplicatedEndpoints.stream()
+            .filter(e -> !existingIds.contains(e.getId()))
+            .collect(java.util.stream.Collectors.toList());
         
-        for (CodeEndpoint endpoint : endpoints) {
-            if (existingIds.contains(endpoint.getId())) {
-                toUpdate.add(endpoint);
-            } else {
-                toInsert.add(endpoint);
-            }
-        }
-        
-        // 批量插入和更新
+        // 批量插入新端点
         if (!toInsert.isEmpty()) {
             context.getWriter().getInsertEndpointsBatch().accept(toInsert);
         }
-        if (!toUpdate.isEmpty()) {
-            context.getWriter().getUpdateEndpointsBatch().accept(toUpdate);
-        }
+        
+        log.info("端点保存完成：去重后 {} 个，新插入 {} 个，已存在 {} 个（跳过）",
+            deduplicatedEndpoints.size(), toInsert.size(), existingIds.size());
     }
     
     /**
@@ -338,7 +343,7 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
      * 创建占位符函数节点
      * 业务规则：当调用关系的目标节点不存在时，创建占位符节点
      * 
-     * @param qualifiedName 全限定名
+     * @param qualifiedName 全限定名（格式：com.example.Class.method(params)）
      * @param language 语言
      * @return 占位符节点
      */
@@ -348,7 +353,54 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
         placeholder.setQualifiedName(qualifiedName);
         placeholder.setIsPlaceholder(true);
         placeholder.setLanguage(language);
+        
+        // 从 qualifiedName 中提取 name 和 signature
+        // 格式：com.example.Class.method(params):returnType 或 com.example.Class.method(params)
+        String nameAndSignature = extractMethodNameAndSignature(qualifiedName);
+        if (nameAndSignature != null) {
+            // 如果包含参数，提取方法名
+            int leftParen = nameAndSignature.indexOf('(');
+            if (leftParen > 0) {
+                String methodName = nameAndSignature.substring(0, leftParen);
+                placeholder.setName(methodName);
+                placeholder.setSignature(nameAndSignature);
+            } else {
+                placeholder.setName(nameAndSignature);
+            }
+        }
+        
         return placeholder;
+    }
+    
+    /**
+     * 从 qualifiedName 中提取方法名和签名
+     * 例如：com.example.Class.method(params) -> method(params)
+     */
+    private String extractMethodNameAndSignature(String qualifiedName) {
+        if (qualifiedName == null || qualifiedName.isEmpty()) {
+            return null;
+        }
+        
+        // 先找到第一个 '('，确定方法签名的开始位置
+        int leftParen = qualifiedName.indexOf('(');
+        if (leftParen <= 0) {
+            // 没有参数列表，直接找最后一个 '.'
+            int lastDot = qualifiedName.lastIndexOf('.');
+            if (lastDot >= 0 && lastDot < qualifiedName.length() - 1) {
+                return qualifiedName.substring(lastDot + 1);
+            }
+            return qualifiedName;
+        }
+        
+        // 在 '(' 之前的部分找最后一个 '.'
+        String beforeParams = qualifiedName.substring(0, leftParen);
+        int lastDot = beforeParams.lastIndexOf('.');
+        if (lastDot >= 0 && lastDot < beforeParams.length() - 1) {
+            // 返回 method(params) 部分
+            return qualifiedName.substring(lastDot + 1);
+        }
+        
+        return qualifiedName;
     }
     
     protected void triggerCascadeChanges(CodeGraphContext context, List<String> dependentFiles) {

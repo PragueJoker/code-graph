@@ -50,7 +50,9 @@ public class EndpointParsingService {
      * @param fileName 文件名
      * @param projectFilePath 项目文件路径
      * @return 解析到的端点列表
+     * @deprecated 请使用 parseEndpointsForType 方法（新架构）
      */
+    @Deprecated
     public List<CodeEndpoint> parseEndpoints(
             CompilationUnit cu,
             String packageName,
@@ -94,6 +96,55 @@ public class EndpointParsingService {
                 
                 if (!parsedEndpoints.isEmpty()) {
                     log.info("规则 {} 解析到 {} 个端点", rule.getName(), parsedEndpoints.size());
+                }
+            } catch (Exception e) {
+                log.error("执行规则 {} 失败", rule.getName(), e);
+            }
+        }
+        
+        return endpoints;
+    }
+    
+    /**
+     * 解析指定类型中的端点（用于 Processor 架构）
+     * 
+     * @param typeDecl 类型声明
+     * @param cu 编译单元
+     * @param packageName 包名
+     * @param fileName 文件名
+     * @param projectFilePath 项目文件路径
+     * @return 解析到的端点列表
+     */
+    public List<CodeEndpoint> parseEndpointsForType(
+            TypeDeclaration typeDecl,
+            CompilationUnit cu,
+            String packageName,
+            String fileName,
+            String projectFilePath) {
+        
+        if (allRules == null || allRules.isEmpty()) {
+            log.debug("没有可用的 EPR 规则");
+            return Collections.emptyList();
+        }
+        
+        // 1. 根据包路径过滤规则
+        List<EndpointParseRule> applicableRules = scopeFilter.filterRules(allRules, packageName, fileName);
+        
+        if (applicableRules.isEmpty()) {
+            return Collections.emptyList();
+        }
+        
+        // 2. 应用每个规则
+        List<CodeEndpoint> endpoints = new ArrayList<>();
+        
+        for (EndpointParseRule rule : applicableRules) {
+            try {
+                List<CodeEndpoint> parsedEndpoints = eprEngine.executeRule(rule, cu, typeDecl, projectFilePath);
+                endpoints.addAll(parsedEndpoints);
+                
+                if (!parsedEndpoints.isEmpty()) {
+                    log.debug("规则 {} 在类 {} 中解析到 {} 个端点", 
+                        rule.getName(), typeDecl.getName().getIdentifier(), parsedEndpoints.size());
                 }
             } catch (Exception e) {
                 log.error("执行规则 {} 失败", rule.getName(), e);

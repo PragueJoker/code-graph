@@ -11,3 +11,8 @@ spring:
       username: neo4j
       password: neo4j123456
 
+logging:
+  level:
+    com.poseidon.codegraph.engine.domain.parser: DEBUG
+    com.poseidon.codegraph.engine.domain.service.processor: DEBUG
+

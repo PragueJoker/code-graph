@@ -26,6 +26,7 @@
 
   <modules>
     <module>code-graph-engine</module>
+    <module>code-graph-test</module>
   </modules>
 
   <dependencyManagement>

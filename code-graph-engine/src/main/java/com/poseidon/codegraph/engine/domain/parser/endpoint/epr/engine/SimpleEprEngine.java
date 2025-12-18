@@ -254,8 +254,11 @@ public class SimpleEprEngine {
             // 提取 functionId（如果节点是 MethodDeclaration）
             String functionId = extractFunctionId(node, typeDecl);
             
+            // 提取行号
+            int startLine = cu.getLineNumber(node.getStartPosition());
+            
             // 构建端点
-            return buildEndpoint(buildConfig, extractedValues, projectFilePath, functionId);
+            return buildEndpoint(buildConfig, extractedValues, projectFilePath, functionId, cu, node);
             
         } catch (Exception e) {
             log.error("提取端点失败: rule={}, error={}", rule.getName(), e.getMessage(), e);
@@ -267,15 +270,36 @@ public class SimpleEprEngine {
      * 提取方法的 qualifiedName 作为 functionId
      */
     private String extractFunctionId(ASTNode node, TypeDeclaration typeDecl) {
-        if (!(node instanceof org.eclipse.jdt.core.dom.MethodDeclaration)) {
+        org.eclipse.jdt.core.dom.MethodDeclaration method = null;
+        
+        // 1. 如果节点本身是 MethodDeclaration，直接使用
+        if (node instanceof org.eclipse.jdt.core.dom.MethodDeclaration) {
+            method = (org.eclipse.jdt.core.dom.MethodDeclaration) node;
+            log.warn("      [DEBUG] 节点是 MethodDeclaration");
+        } 
+        // 2. 如果节点是 MethodInvocation（方法调用），找到它所在的父方法
+        else if (node instanceof org.eclipse.jdt.core.dom.MethodInvocation) {
+            log.warn("      [DEBUG] 节点是 MethodInvocation，查找父方法...");
+            ASTNode parent = node.getParent();
+            while (parent != null) {
+                if (parent instanceof org.eclipse.jdt.core.dom.MethodDeclaration) {
+                    method = (org.eclipse.jdt.core.dom.MethodDeclaration) parent;
+                    log.warn("      [DEBUG] ✓ 找到父方法: {}", method.getName().getIdentifier());
+                    break;
+                }
+                parent = parent.getParent();
+            }
+        }
+        
+        if (method == null) {
+            log.warn("      [ERROR] 节点不是方法声明，也找不到父方法，无法提取 functionId");
             return null;
         }
         
-        org.eclipse.jdt.core.dom.MethodDeclaration method = (org.eclipse.jdt.core.dom.MethodDeclaration) node;
         org.eclipse.jdt.core.dom.IMethodBinding binding = method.resolveBinding();
         
         if (binding == null) {
-            log.warn("      方法绑定为空，无法生成 functionId");
+            log.warn("      [ERROR] 方法绑定为空，无法生成 functionId，方法名: {}", method.getName().getIdentifier());
             return null;
         }
         
@@ -291,22 +315,16 @@ public class SimpleEprEngine {
     }
     
     /**
-     * 构建方法签名
+     * 构建方法签名（与 FunctionProcessor 保持一致，不包含返回类型）
      */
     private String buildMethodSignature(org.eclipse.jdt.core.dom.IMethodBinding binding) {
         StringBuilder sig = new StringBuilder(binding.getName()).append("(");
         org.eclipse.jdt.core.dom.ITypeBinding[] params = binding.getParameterTypes();
         for (int i = 0; i < params.length; i++) {
-            if (i > 0) sig.append(", ");
+            if (i > 0) sig.append(",");  // 注意：不加空格，与 FunctionProcessor 保持一致
             sig.append(getQualifiedTypeName(params[i]));
         }
-        sig.append("):");
-        org.eclipse.jdt.core.dom.ITypeBinding returnType = binding.getReturnType();
-        if (returnType != null) {
-            sig.append(getQualifiedTypeName(returnType));
-        } else {
-            sig.append("void");
-        }
+        sig.append(")");
         return sig.toString();
     }
     
@@ -334,42 +352,125 @@ public class SimpleEprEngine {
             TypeDeclaration typeDecl,
             Map<String, String> extractedValues) {
         
+        log.warn("[DEBUG] extractField - config.transform={}, config.from={}", config.getTransform(), config.getFrom());
+        
+        String value = null;
+        
         // 1. 简单提取
         if (config.getFrom() != null) {
-            String value = extractFromPath(config.getFrom(), node, cu, typeDecl, config.getTrace());
+            value = extractFromPath(config.getFrom(), node, cu, typeDecl, config.getTrace());
             // 如果提取失败且有默认值，使用默认值
             if (value == null && config.getDefaultValue() != null) {
-                return config.getDefaultValue().toString();
+                value = config.getDefaultValue().toString();
             }
-            return value;
         }
         
         // 2. 映射
-        if (config.getMapping() != null && node instanceof MethodInvocation) {
+        else if (config.getMapping() != null && node instanceof MethodInvocation) {
             String methodName = ((MethodInvocation) node).getName().getIdentifier();
             Object mappedValue = config.getMapping().get(methodName);
-            return mappedValue != null ? mappedValue.toString() : null;
+            value = mappedValue != null ? mappedValue.toString() : null;
         }
         
         // 3. 组合
-        if (config.getCombine() != null) {
-            return combineValues(config.getCombine(), extractedValues);
+        else if (config.getCombine() != null) {
+            value = combineValues(config.getCombine(), extractedValues);
         }
         
         // 4. 策略列表
-        if (config.getStrategies() != null) {
+        else if (config.getStrategies() != null) {
             for (ExtractConfig.StrategyConfig strategy : config.getStrategies()) {
                 ExtractConfig.TryConfig tryConfig = strategy.getTryConfig();
                 if (tryConfig != null) {
-                    String value = extractFromTryConfig(tryConfig, node, cu, typeDecl);
+                    value = extractFromTryConfig(tryConfig, node, cu, typeDecl);
                     if (value != null) {
-                        return value;
+                        break;
                     }
                 }
             }
         }
         
-        return null;
+        // 应用 transform（如果有）
+        if (value != null && config.getTransform() != null) {
+            log.warn("[DEBUG] 应用 transform: {} 到值: {}", config.getTransform(), value);
+            String transformedValue = applyTransform(value, config.getTransform());
+            log.warn("[DEBUG] transform 后的值: {}", transformedValue);
+            value = transformedValue;
+        }
+        
+        return value;
+    }
+    
+    /**
+     * 应用转换
+     */
+    private String applyTransform(String value, Object transform) {
+        if (transform == null || value == null) {
+            return value;
+        }
+        
+        String transformType = transform.toString();
+        
+        switch (transformType) {
+            case "toUpperCase":
+                return value.toUpperCase();
+            
+            case "toLowerCase":
+                return value.toLowerCase();
+            
+            case "extractPath":
+                // 从完整 URL 中提取 path 部分
+                // 输入：{baseUrl}/api/path 或 http://host/api/path
+                // 输出：/api/path
+                return extractPathFromUrl(value);
+            
+            default:
+                log.warn("未知的 transform 类型: {}", transformType);
+                return value;
+        }
+    }
+    
+    /**
+     * 从 URL 中提取 path 部分
+     * 处理两种情况：
+     * 1. {variable}/api/path → /api/path
+     * 2. http://host:port/api/path → /api/path
+     */
+    private String extractPathFromUrl(String url) {
+        if (url == null || url.isEmpty()) {
+            return url;
+        }
+        
+        // 去掉占位符前缀（例如 {baseUrl}/api/path）
+        if (url.contains("}")) {
+            int closeBrace = url.indexOf('}');
+            String remaining = url.substring(closeBrace + 1);
+            if (remaining.startsWith("/")) {
+                return remaining;
+            }
+        }
+        
+        // 处理完整 URL（http://host/path 或 https://host/path）
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            try {
+                // 找到第三个 / 之后的部分
+                int protocolEnd = url.indexOf("://");
+                int pathStart = url.indexOf('/', protocolEnd + 3);
+                if (pathStart > 0) {
+                    return url.substring(pathStart);
+                }
+            } catch (Exception e) {
+                log.warn("解析 URL 失败: {}", url, e);
+            }
+        }
+        
+        // 如果已经是 path 形式，直接返回
+        if (url.startsWith("/")) {
+            return url;
+        }
+        
+        // 其他情况，保持原样
+        return url;
     }
     
     /**
@@ -686,7 +787,7 @@ public class SimpleEprEngine {
     /**
      * 构建端点
      */
-    private CodeEndpoint buildEndpoint(BuildConfig config, Map<String, String> values, String projectFilePath, String functionId) {
+    private CodeEndpoint buildEndpoint(BuildConfig config, Map<String, String> values, String projectFilePath, String functionId, CompilationUnit cu, ASTNode node) {
         CodeEndpoint endpoint = new CodeEndpoint();
         
         // 基本属性
@@ -695,6 +796,12 @@ public class SimpleEprEngine {
         endpoint.setIsExternal(config.getIsExternal());
         endpoint.setProjectFilePath(projectFilePath);
         endpoint.setFunctionId(functionId);  // 设置 functionId
+        
+        // 设置位置信息
+        if (cu != null && node != null) {
+            endpoint.setStartLine(cu.getLineNumber(node.getStartPosition()));
+            endpoint.setEndLine(cu.getLineNumber(node.getStartPosition() + node.getLength()));
+        }
         
         // HTTP 属性
         if (config.getHttpMethod() != null) {

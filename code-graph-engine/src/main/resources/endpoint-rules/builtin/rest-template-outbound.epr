@@ -1,17 +1,16 @@
 name: "RestTemplate Outbound"
 description: "解析 RestTemplate 的 HTTP 出口调用"
 version: "1.0"
-enabled: true
+enabled: true  # 重新启用，测试 receiver 约束是否生效
 priority: 80
 type: "http-outbound"
 
 scope:
   packageIncludes:
+    - "**.service"
     - "**.service.**"
+    - "**.client"
     - "**.client.**"
-  packageExcludes:
-    - "**.controller.**"
-    - "**.test.**"
 
 locate:
   nodeType: "MethodInvocation"
@@ -35,4 +34,5 @@ extract:
   path:
     from: "argument[0]"
     trace: "auto"
+    transform: "extractPath"  # 只提取 path 部分，去掉 baseUrl
 

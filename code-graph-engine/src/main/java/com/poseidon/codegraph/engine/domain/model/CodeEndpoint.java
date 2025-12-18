@@ -48,8 +48,20 @@ public class CodeEndpoint extends CodeNode {
     private String parseLevel;         // full, partial, unknown
     private String targetService;      // 目标服务名（仅 outbound）
     
-    // ===== 关联属性 =====
-    private String functionId;         // 关联的函数ID
+    // ===== 临时属性（仅用于构建关系，不持久化） =====
+    
+    /**
+     * 从 AST 提取的函数 ID（临时字段）
+     * EPR 引擎设置此字段，EndpointProcessor 用它查找 CodeFunction 对象
+     */
+    private transient String functionId;
+    
+    /**
+     * 关联的函数对象（临时字段，不持久化）
+     * EndpointProcessor 设置此字段，用于构建关系
+     * 注意：一个 Endpoint 实例对应一个调用点，所以只关联单个 Function
+     */
+    private transient CodeFunction function;
     
     public String getNodeType() {
         return "CodeEndpoint";

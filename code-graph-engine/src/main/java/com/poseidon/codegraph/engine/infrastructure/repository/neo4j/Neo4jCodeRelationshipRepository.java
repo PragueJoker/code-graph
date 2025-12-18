@@ -168,6 +168,8 @@ public class Neo4jCodeRelationshipRepository implements CodeRelationshipReposito
             MATCH (to:%s {id: rel.toNodeId})
             CREATE (from)-[r:%s]->(to)
             SET r.id = rel.id,
+                r.fromNodeId = rel.fromNodeId,
+                r.toNodeId = rel.toNodeId,
                 r.relationshipType = rel.relationshipType,
                 r.lineNumber = rel.lineNumber,
                 r.callType = rel.callType,

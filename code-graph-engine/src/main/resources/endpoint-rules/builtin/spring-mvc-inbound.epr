@@ -1,7 +1,7 @@
 name: "Spring MVC Inbound"
 description: "解析 Spring MVC Controller 的 HTTP 入口端点"
 version: "1.0"
-enabled: true
+enabled: true  # 重新启用
 priority: 100
 type: "http-inbound"
 
@@ -12,7 +12,7 @@ scope:
     - "**.web"
     - "**.web.**"
   packageExcludes:
-    - "**.test.**"
+    - "**/test/**"  # 只排除 src/test 目录，不排除包名含 test 的业务代码
 
 locate:
   nodeType: "MethodDeclaration"

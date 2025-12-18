@@ -1,7 +1,7 @@
 name: "Router with Base Path"
 description: "解析带基础路径的 Router 对象"
 version: "1.0"
-enabled: true
+enabled: false  # 禁用此测试规则，避免误匹配 Spring MVC Controller
 priority: 95
 type: "http-inbound"
 

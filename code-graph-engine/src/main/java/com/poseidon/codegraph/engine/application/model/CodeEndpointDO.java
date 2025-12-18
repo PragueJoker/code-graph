@@ -45,8 +45,5 @@ public class CodeEndpointDO {
     private String serviceName;
     private String parseLevel;
     private String targetService;
-    
-    // 关联的函数ID
-    private String functionId;
 }
 

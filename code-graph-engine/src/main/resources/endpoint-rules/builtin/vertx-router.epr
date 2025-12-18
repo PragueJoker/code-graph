@@ -1,7 +1,7 @@
 name: "Vert.x Router"
 description: "解析 Vert.x Router 的 HTTP 路由定义"
 version: "1.0"
-enabled: true
+enabled: false  # 禁用此测试规则，避免误匹配
 priority: 95
 type: "http-inbound"
 

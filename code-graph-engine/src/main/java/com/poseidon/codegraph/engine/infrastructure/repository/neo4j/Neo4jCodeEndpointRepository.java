@@ -56,8 +56,7 @@ public class Neo4jCodeEndpointRepository implements CodeEndpointRepository {
                 dbOperation: endpoint.dbOperation,
                 serviceName: endpoint.serviceName,
                 parseLevel: endpoint.parseLevel,
-                targetService: endpoint.targetService,
-                functionId: endpoint.functionId
+                targetService: endpoint.targetService
             })
             """;
         
@@ -101,8 +100,7 @@ public class Neo4jCodeEndpointRepository implements CodeEndpointRepository {
                 e.dbOperation = endpoint.dbOperation,
                 e.serviceName = endpoint.serviceName,
                 e.parseLevel = endpoint.parseLevel,
-                e.targetService = endpoint.targetService,
-                e.functionId = endpoint.functionId
+                e.targetService = endpoint.targetService
             """;
         
         try (Session session = driver.session()) {
@@ -188,7 +186,7 @@ public class Neo4jCodeEndpointRepository implements CodeEndpointRepository {
                 endpoint.setServiceName(node.get("serviceName").asString(null));
                 endpoint.setParseLevel(node.get("parseLevel").asString(null));
                 endpoint.setTargetService(node.get("targetService").asString(null));
-                endpoint.setFunctionId(node.get("functionId").asString(null));
+                // functionId 不再持久化
                 endpoints.add(endpoint);
             });
             
@@ -229,7 +227,7 @@ public class Neo4jCodeEndpointRepository implements CodeEndpointRepository {
         map.put("serviceName", endpoint.getServiceName());
         map.put("parseLevel", endpoint.getParseLevel());
         map.put("targetService", endpoint.getTargetService());
-        map.put("functionId", endpoint.getFunctionId());
+        // functionId 不再持久化
         return map;
     }
 }

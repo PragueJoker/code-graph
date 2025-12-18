@@ -173,6 +173,7 @@ public class UniversalValueTracer {
     
     /**
      * 在当前方法内查找局部变量
+     * 修复：遍历整个方法体，而不是只向上遍历
      */
     private VariableDeclarationFragment findLocalVariableDeclaration(SimpleName varName, MethodDeclaration method) {
         if (method == null || method.getBody() == null) {
@@ -182,22 +183,29 @@ public class UniversalValueTracer {
         String targetName = varName.getIdentifier();
         final VariableDeclarationFragment[] result = {null};
         
-        // 向上遍历 AST，查找变量声明
-        ASTNode current = varName.getParent();
-        while (current != null && current != method) {
-            if (current instanceof VariableDeclarationStatement) {
-                VariableDeclarationStatement vds = (VariableDeclarationStatement) current;
-                for (Object fragment : vds.fragments()) {
+        // 遍历整个方法体，查找变量声明
+        Block methodBody = method.getBody();
+        methodBody.accept(new ASTVisitor() {
+            @Override
+            public boolean visit(VariableDeclarationStatement node) {
+                for (Object fragment : node.fragments()) {
                     VariableDeclarationFragment vdf = (VariableDeclarationFragment) fragment;
                     if (vdf.getName().getIdentifier().equals(targetName)) {
-                        return vdf;
+                        // 检查变量声明是否在使用之前（通过行号判断）
+                        CompilationUnit cu = (CompilationUnit) vdf.getRoot();
+                        int declLine = cu.getLineNumber(vdf.getStartPosition());
+                        int useLine = cu.getLineNumber(varName.getStartPosition());
+                        if (declLine <= useLine) {
+                            result[0] = vdf;
+                            return false;  // 找到后停止遍历
+                        }
                     }
                 }
+                return true;  // 继续遍历
             }
-            current = current.getParent();
-        }
+        });
         
-        return null;
+        return result[0];
     }
     
     /**

@@ -1,6 +1,5 @@
 package com.poseidon.codegraph.engine.domain.parser;
 
-import com.poseidon.codegraph.engine.domain.context.CodeGraphContext;
 import com.poseidon.codegraph.engine.domain.parser.enricher.GraphEnricher;
 import com.poseidon.codegraph.engine.domain.parser.filter.FilterPipeline;
 import com.poseidon.codegraph.engine.domain.parser.filter.GetterSetterFilter;
@@ -25,20 +24,37 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
     
     private final String[] classpathEntries;
     private final String[] sourcepathEntries;
+    private final ASTTraverser traverser;
     
     // 司内包前缀白名单（只解析源码和这些包中的方法调用）
     private static final Set<String> INTERNAL_PACKAGE_PREFIXES = Set.of(
         "com.poseidon."
     );
     
-    public JdtSourceCodeParser(String[] classpathEntries, String[] sourcepathEntries) {
+    /**
+     * 构造函数（使用 ProcessorRegistry）
+     */
+    public JdtSourceCodeParser(String[] classpathEntries, String[] sourcepathEntries, ProcessorRegistry registry) {
         super(new FilterPipeline()
             .addFilter(new GetterSetterFilter())
             .addFilter(new PackageWhitelistFilter(INTERNAL_PACKAGE_PREFIXES)));
         this.classpathEntries = classpathEntries;
         this.sourcepathEntries = sourcepathEntries;
+        this.traverser = new ASTTraverser(registry.getAll());
     }
     
+    /**
+     * 便捷构造函数（使用默认 Processor：核心解析 + 端点解析）
+     */
+    public JdtSourceCodeParser(String[] classpathEntries, String[] sourcepathEntries) {
+        this(classpathEntries, sourcepathEntries, ProcessorRegistry.createWithEndpoint());
+    }
+    
+    /**
+     * 兼容旧的构造函数（使用 GraphEnricher）
+     * @deprecated 请使用基于 ProcessorRegistry 的构造函数
+     */
+    @Deprecated
     public JdtSourceCodeParser(String[] classpathEntries, String[] sourcepathEntries, 
                               List<GraphEnricher> enrichers) {
         super(new FilterPipeline()
@@ -47,6 +63,8 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
             enrichers);
         this.classpathEntries = classpathEntries;
         this.sourcepathEntries = sourcepathEntries;
+        // 创建默认的 ProcessorRegistry
+        this.traverser = new ASTTraverser(ProcessorRegistry.createWithEndpoint().getAll());
     }
     
     private CompilationUnit createAST(String absoluteFilePath) {
@@ -104,74 +122,33 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
     @Override
     public CodeGraph parse(String absoluteFilePath, String projectName, String projectFilePath,
                           String gitRepoUrl, String gitBranch) {
-        log.info("开始解析代码图谱: absoluteFile={}, projectFile={}, git={}/{}", 
+        log.info("开始解析代码图谱（使用 Processor 架构）: absoluteFile={}, projectFile={}, git={}/{}", 
                 absoluteFilePath, projectFilePath, gitRepoUrl, gitBranch);
-        CodeGraph graph = new CodeGraph();
+        
+        // 创建 AST
         CompilationUnit cu = createAST(absoluteFilePath);
         
-        // 提取包名
-        String packageName = extractPackageName(cu);
-        
-        List<CodePackage> packages = parsePackages(cu, absoluteFilePath, projectName, projectFilePath);
-        packages.forEach(pkg -> {
-            pkg.setGitRepoUrl(gitRepoUrl);
-            pkg.setGitBranch(gitBranch);
-            graph.addPackage(pkg);
-        });
-        log.debug("解析 Package 完成: file={}, packageCount={}", projectFilePath, packages.size());
-        
-        List<CodeUnit> units = parseUnits(cu, absoluteFilePath, projectName, projectFilePath);
-        int functionCount = 0;
-        String packageId = packages.isEmpty() ? null : packages.get(0).getId();
-        
-        for (CodeUnit unit : units) {
-            if (packageId != null) {
-                unit.setPackageId(packageId);
-            }
-            unit.setGitRepoUrl(gitRepoUrl);
-            unit.setGitBranch(gitBranch);
-            graph.addUnit(unit);
-            
-            for (CodeFunction function : unit.getFunctions()) {
-                function.setGitRepoUrl(gitRepoUrl);
-                function.setGitBranch(gitBranch);
-                graph.addFunction(function);
-            }
-            functionCount += unit.getFunctions().size();
-        }
-        log.info("解析 Units 和 Functions 完成: file={}, unitCount={}, functionCount={}", 
-                 projectFilePath, units.size(), functionCount);
-        
-        buildBelongsToRelationships(graph, packages, units);
-        
-        List<CodeRelationship> relationships = parseRelationships(cu, projectName, projectFilePath);
-        relationships.forEach(graph::addRelationship);
-        
-        log.info("代码图谱解析完成: file={}, packages={}, units={}, functions={}, relationships={}", 
-                 projectFilePath, packages.size(), units.size(), functionCount, graph.getRelationshipsAsList().size());
-        
-        // 应用增强器（端点解析等）
-        CodeGraphContext context = buildEnrichmentContext(absoluteFilePath, projectName, 
-                                                          projectFilePath, gitRepoUrl, gitBranch, packageName);
-        applyEnrichers(graph, cu, context);
-        
-        return graph;
-    }
-    
-    /**
-     * 构建增强上下文
-     */
-    private CodeGraphContext buildEnrichmentContext(String absoluteFilePath, String projectName,
-                                                     String projectFilePath, String gitRepoUrl,
-                                                     String gitBranch, String packageName) {
-        CodeGraphContext context = new CodeGraphContext();
+        // 创建 ProcessorContext
+        ProcessorContext context = new ProcessorContext();
+        context.setCompilationUnit(cu);
         context.setAbsoluteFilePath(absoluteFilePath);
         context.setProjectName(projectName);
         context.setProjectFilePath(projectFilePath);
         context.setGitRepoUrl(gitRepoUrl);
         context.setGitBranch(gitBranch);
-        context.setPackageName(packageName);
-        return context;
+        
+        // 使用 ASTTraverser 遍历并触发所有 Processor
+        CodeGraph graph = traverser.traverse(context);
+        
+        log.info("代码图谱解析完成: file={}, packages={}, units={}, functions={}, relationships={}, endpoints={}",
+                 projectFilePath,
+                 graph.getPackagesAsList().size(),
+                 graph.getUnitsAsList().size(),
+                 graph.getFunctionsAsList().size(),
+                 graph.getRelationshipsAsList().size(),
+                 graph.getEndpointsAsList().size());
+        
+        return graph;
     }
     
     @Override
@@ -432,40 +409,6 @@ public class JdtSourceCodeParser extends AbstractSourceCodeParser {
         
         log.info("文件调用关系解析完成: file={}, relationshipCount={}", projectFilePath, relationships.size());
         return relationships;
-    }
-    
-    private void buildBelongsToRelationships(CodeGraph graph, List<CodePackage> packages, List<CodeUnit> units) {
-        String packageId = packages.isEmpty() ? null : packages.get(0).getId();
-        
-        if (packageId != null) {
-            for (CodeUnit unit : units) {
-                CodeRelationship rel = new CodeRelationship();
-                rel.setId(UUID.randomUUID().toString());
-                rel.setFromNodeId(packageId);
-                rel.setToNodeId(unit.getId());
-                rel.setRelationshipType(RelationshipType.PACKAGE_TO_UNIT);
-                rel.setLanguage("java");
-                graph.addRelationship(rel);
-                log.debug("构建结构关系: Package {} -> Unit {}", packageId, unit.getId());
-            }
-        }
-        
-        for (CodeUnit unit : units) {
-            for (CodeFunction function : unit.getFunctions()) {
-                CodeRelationship rel = new CodeRelationship();
-                rel.setId(UUID.randomUUID().toString());
-                rel.setFromNodeId(unit.getId());
-                rel.setToNodeId(function.getId());
-                rel.setRelationshipType(RelationshipType.UNIT_TO_FUNCTION);
-                rel.setLanguage("java");
-                graph.addRelationship(rel);
-                log.debug("构建结构关系: Unit {} -> Function {}", unit.getId(), function.getId());
-            }
-        }
-        
-        log.info("构建结构关系完成: packageToUnit={}, unitToFunction={}", 
-                 packageId != null ? units.size() : 0,
-                 units.stream().mapToInt(u -> u.getFunctions().size()).sum());
     }
     
     private String extractPackageName(CompilationUnit cu) {
