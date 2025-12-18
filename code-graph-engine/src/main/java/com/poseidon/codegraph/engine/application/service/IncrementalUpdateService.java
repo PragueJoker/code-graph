@@ -209,6 +209,12 @@ public class IncrementalUpdateService {
                 .collect(Collectors.toList())
         );
         
+        context.getReader().setFindEndpointsByNormalizedPath((normalizedPath, direction) -> 
+            endpointRepository.findEndpointsByNormalizedPath(normalizedPath, direction).stream()
+                .map(CodeGraphConverter::toDomain)
+                .collect(Collectors.toList())
+        );
+        
         // ========== 修改函数 (Writer) ==========
         
         context.getWriter().setDeleteFileOutgoingCalls(path -> 

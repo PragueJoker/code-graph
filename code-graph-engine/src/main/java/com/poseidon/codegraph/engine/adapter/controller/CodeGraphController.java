@@ -121,7 +121,7 @@ public class CodeGraphController {
     /**
      * 健康检查接口
      */
-    @GetMapping("/health")
+    @GetMapping("/health-check")
     public ApiResponse<String> health() {
         return ApiResponse.success("服务运行正常", "OK");
     }

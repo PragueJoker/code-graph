@@ -157,44 +157,80 @@ public class Neo4jCodeEndpointRepository implements CodeEndpointRepository {
         
         try (Session session = driver.session()) {
             Result result = session.run(cypher, Map.of("projectFilePath", projectFilePath));
-            List<CodeEndpointDO> endpoints = new ArrayList<>();
-            
-            result.stream().forEach(record -> {
-                var node = record.get("e").asNode();
-                CodeEndpointDO endpoint = new CodeEndpointDO();
-                endpoint.setId(node.get("id").asString());
-                endpoint.setName(node.get("name").asString(null));
-                endpoint.setQualifiedName(node.get("qualifiedName").asString(null));
-                endpoint.setProjectFilePath(node.get("projectFilePath").asString(null));
-                endpoint.setGitRepoUrl(node.get("gitRepoUrl").asString(null));
-                endpoint.setGitBranch(node.get("gitBranch").asString(null));
-                endpoint.setLanguage(node.get("language").asString(null));
-                endpoint.setStartLine(node.get("startLine").asInt(0));
-                endpoint.setEndLine(node.get("endLine").asInt(0));
-                endpoint.setEndpointType(node.get("endpointType").asString(null));
-                endpoint.setDirection(node.get("direction").asString(null));
-                endpoint.setIsExternal(node.get("isExternal").asBoolean(false));
-                endpoint.setHttpMethod(node.get("httpMethod").asString(null));
-                endpoint.setPath(node.get("path").asString(null));
-                endpoint.setNormalizedPath(node.get("normalizedPath").asString(null));
-                endpoint.setTopic(node.get("topic").asString(null));
-                endpoint.setOperation(node.get("operation").asString(null));
-                endpoint.setKeyPattern(node.get("keyPattern").asString(null));
-                endpoint.setDataStructure(node.get("dataStructure").asString(null));
-                endpoint.setTableName(node.get("tableName").asString(null));
-                endpoint.setDbOperation(node.get("dbOperation").asString(null));
-                endpoint.setServiceName(node.get("serviceName").asString(null));
-                endpoint.setParseLevel(node.get("parseLevel").asString(null));
-                endpoint.setTargetService(node.get("targetService").asString(null));
-                // functionId 不再持久化
-                endpoints.add(endpoint);
-            });
-            
-            return endpoints;
+            return parseEndpointsFromResult(result);
         } catch (Exception e) {
             log.error("查询端点失败: projectFilePath={}, error={}", projectFilePath, e.getMessage(), e);
             throw new RuntimeException("查询端点失败: " + projectFilePath, e);
         }
+    }
+    
+    @Override
+    public List<CodeEndpointDO> findEndpointsByNormalizedPath(String normalizedPath, String direction) {
+        String cypher;
+        Map<String, Object> params = new HashMap<>();
+        params.put("normalizedPath", normalizedPath);
+        
+        if (direction != null && !direction.isEmpty()) {
+            cypher = """
+                MATCH (e:CodeEndpoint {normalizedPath: $normalizedPath, direction: $direction})
+                RETURN e
+                """;
+            params.put("direction", direction);
+        } else {
+            cypher = """
+                MATCH (e:CodeEndpoint {normalizedPath: $normalizedPath})
+                RETURN e
+                """;
+        }
+        
+        try (Session session = driver.session()) {
+            Result result = session.run(cypher, params);
+            return parseEndpointsFromResult(result);
+        } catch (Exception e) {
+            log.error("查询端点失败: normalizedPath={}, direction={}, error={}", 
+                normalizedPath, direction, e.getMessage(), e);
+            throw new RuntimeException("查询端点失败: " + normalizedPath, e);
+        }
+    }
+    
+    /**
+     * 从 Neo4j 结果中解析端点列表
+     */
+    private List<CodeEndpointDO> parseEndpointsFromResult(Result result) {
+        List<CodeEndpointDO> endpoints = new ArrayList<>();
+        
+        result.stream().forEach(record -> {
+            var node = record.get("e").asNode();
+            CodeEndpointDO endpoint = new CodeEndpointDO();
+            endpoint.setId(node.get("id").asString());
+            endpoint.setName(node.get("name").asString(null));
+            endpoint.setQualifiedName(node.get("qualifiedName").asString(null));
+            endpoint.setProjectFilePath(node.get("projectFilePath").asString(null));
+            endpoint.setGitRepoUrl(node.get("gitRepoUrl").asString(null));
+            endpoint.setGitBranch(node.get("gitBranch").asString(null));
+            endpoint.setLanguage(node.get("language").asString(null));
+            endpoint.setStartLine(node.get("startLine").asInt(0));
+            endpoint.setEndLine(node.get("endLine").asInt(0));
+            endpoint.setEndpointType(node.get("endpointType").asString(null));
+            endpoint.setDirection(node.get("direction").asString(null));
+            endpoint.setIsExternal(node.get("isExternal").asBoolean(false));
+            endpoint.setHttpMethod(node.get("httpMethod").asString(null));
+            endpoint.setPath(node.get("path").asString(null));
+            endpoint.setNormalizedPath(node.get("normalizedPath").asString(null));
+            endpoint.setTopic(node.get("topic").asString(null));
+            endpoint.setOperation(node.get("operation").asString(null));
+            endpoint.setKeyPattern(node.get("keyPattern").asString(null));
+            endpoint.setDataStructure(node.get("dataStructure").asString(null));
+            endpoint.setTableName(node.get("tableName").asString(null));
+            endpoint.setDbOperation(node.get("dbOperation").asString(null));
+            endpoint.setServiceName(node.get("serviceName").asString(null));
+            endpoint.setParseLevel(node.get("parseLevel").asString(null));
+            endpoint.setTargetService(node.get("targetService").asString(null));
+            // functionId 不再持久化
+            endpoints.add(endpoint);
+        });
+        
+        return endpoints;
     }
     
     private List<Map<String, Object>> toMapList(List<CodeEndpointDO> endpoints) {

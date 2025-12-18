@@ -161,12 +161,16 @@ public class Neo4jCodeRelationshipRepository implements CodeRelationshipReposito
      * @return Cypher 语句
      */
     private String buildInsertCypher(String fromLabel, String toLabel, String relationshipType) {
+        // MATCHES 关系使用 MERGE 避免重复，其他关系使用 CREATE
+        boolean useMerge = "MATCHES".equals(relationshipType);
+        String createOrMerge = useMerge ? "MERGE" : "CREATE";
+        
         // 使用 String.format 动态构造 Cypher（标签不再硬编码）
         return String.format("""
             UNWIND $relationships AS rel
             MATCH (from:%s {id: rel.fromNodeId})
             MATCH (to:%s {id: rel.toNodeId})
-            CREATE (from)-[r:%s]->(to)
+            %s (from)-[r:%s]->(to)
             SET r.id = rel.id,
                 r.fromNodeId = rel.fromNodeId,
                 r.toNodeId = rel.toNodeId,
@@ -174,7 +178,7 @@ public class Neo4jCodeRelationshipRepository implements CodeRelationshipReposito
                 r.lineNumber = rel.lineNumber,
                 r.callType = rel.callType,
                 r.language = rel.language
-            """, fromLabel, toLabel, relationshipType);
+            """, fromLabel, toLabel, createOrMerge, relationshipType);
     }
 
     /**

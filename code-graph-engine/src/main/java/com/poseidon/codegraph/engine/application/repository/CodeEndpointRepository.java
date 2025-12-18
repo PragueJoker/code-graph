@@ -36,5 +36,13 @@ public interface CodeEndpointRepository {
      * 根据项目文件路径查找端点
      */
     List<CodeEndpointDO> findEndpointsByProjectFilePath(String projectFilePath);
+    
+    /**
+     * 根据 normalizedPath 查找所有端点（可选指定 direction）
+     * @param normalizedPath 标准化路径
+     * @param direction 方向（inbound/outbound），null 表示查询所有方向
+     * @return 匹配的端点列表
+     */
+    List<CodeEndpointDO> findEndpointsByNormalizedPath(String normalizedPath, String direction);
 }
 

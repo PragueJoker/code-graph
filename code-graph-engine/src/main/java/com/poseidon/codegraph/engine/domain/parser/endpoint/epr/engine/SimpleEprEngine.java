@@ -808,7 +808,13 @@ public class SimpleEprEngine {
             endpoint.setHttpMethod(resolveValue(config.getHttpMethod(), values));
         }
         if (config.getPath() != null) {
-            endpoint.setPath(resolveValue(config.getPath(), values));
+            String path = resolveValue(config.getPath(), values);
+            endpoint.setPath(path);
+            
+            // 规范化路径
+            String normalizedPath = normalizePathForEndpoint(node, path, endpoint.getDirection());
+            endpoint.setNormalizedPath(normalizedPath);
+            log.debug("路径规范化: {} → {}", path, normalizedPath);
         }
         
         // Kafka 属性
@@ -824,6 +830,114 @@ public class SimpleEprEngine {
         endpoint.setId(id);
         
         return endpoint;
+    }
+    
+    /**
+     * 根据 endpoint 类型规范化路径
+     * 
+     * @param node AST 节点
+     * @param path 已提取的路径字符串
+     * @param direction endpoint 方向 (inbound/outbound)
+     * @return 规范化后的路径
+     */
+    private String normalizePathForEndpoint(ASTNode node, String path, String direction) {
+        if (path == null || path.isEmpty()) {
+            return path;
+        }
+        
+        // Inbound: 路径通常是字面量，直接规范化字符串
+        if ("inbound".equals(direction)) {
+            return normalizeSpringPathParams(path);
+        }
+        
+        // Outbound: 尝试从 AST 提取表达式进行规范化
+        if ("outbound".equals(direction) && node instanceof MethodInvocation) {
+            MethodInvocation invocation = (MethodInvocation) node;
+            List<?> args = invocation.arguments();
+            
+            // 获取第一个参数（URL 参数）
+            if (!args.isEmpty() && args.get(0) instanceof Expression) {
+                Expression pathExpr = (Expression) args.get(0);
+                
+                // 如果是变量引用，尝试追踪其定义表达式
+                if (pathExpr instanceof SimpleName) {
+                    Expression resolvedExpr = resolveVariableExpression((SimpleName) pathExpr, node);
+                    if (resolvedExpr != null) {
+                        pathExpr = resolvedExpr;
+                        log.debug("追踪到变量定义表达式: {}", pathExpr);
+                    }
+                }
+                
+                // 使用 PathNormalizer 规范化
+                String normalized = com.poseidon.codegraph.engine.domain.parser.endpoint.tracker.PathNormalizer.normalizePath(pathExpr);
+                if (normalized != null) {
+                    return normalized;
+                }
+            }
+        }
+        
+        // Fallback: 直接规范化字符串
+        return normalizeSpringPathParams(path);
+    }
+    
+    /**
+     * 解析变量的定义表达式
+     * 
+     * @param varName 变量名
+     * @param node 当前节点
+     * @return 变量的定义表达式，如果找不到则返回 null
+     */
+    private Expression resolveVariableExpression(SimpleName varName, ASTNode node) {
+        String variableName = varName.getIdentifier();
+        
+        // 向上查找方法体
+        ASTNode current = node;
+        while (current != null && !(current instanceof MethodDeclaration)) {
+            current = current.getParent();
+        }
+        
+        if (current == null) {
+            return null;
+        }
+        
+        MethodDeclaration method = (MethodDeclaration) current;
+        Block body = method.getBody();
+        if (body == null) {
+            return null;
+        }
+        
+        // 查找变量声明语句
+        for (Object stmt : body.statements()) {
+            if (stmt instanceof VariableDeclarationStatement) {
+                VariableDeclarationStatement varStmt = (VariableDeclarationStatement) stmt;
+                for (Object fragment : varStmt.fragments()) {
+                    if (fragment instanceof VariableDeclarationFragment) {
+                        VariableDeclarationFragment varFragment = (VariableDeclarationFragment) fragment;
+                        if (variableName.equals(varFragment.getName().getIdentifier())) {
+                            // 找到了！返回初始化表达式
+                            return varFragment.getInitializer();
+                        }
+                    }
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * 规范化 Spring 路径参数格式
+     * 
+     * /api/users/{id} → /api/users/{param}
+     * /api/users/{userId}/orders/{orderId} → /api/users/{param}/orders/{param}
+     */
+    private String normalizeSpringPathParams(String path) {
+        if (path == null || path.isEmpty()) {
+            return path;
+        }
+        
+        // 替换所有 {xxx} 为 {param}
+        return path.replaceAll("\\{[^}]+\\}", "{param}");
     }
     
     /**

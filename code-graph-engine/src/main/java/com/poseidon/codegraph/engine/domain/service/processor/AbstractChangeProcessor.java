@@ -78,6 +78,8 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
         java.util.List<CodeEndpoint> endpoints = graph.getEndpointsAsList();
         if (!endpoints.isEmpty()) {
             saveEndpointsWithCheck(endpoints, context);
+            // 保存端点后，尝试创建 MATCHES 关系
+            createEndpointMatchRelationships(endpoints, context);
         }
         
         // 5. 处理结构关系（BELONGS_TO 和端点关系）
@@ -190,6 +192,75 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
         }
         if (!toUpdate.isEmpty()) {
             context.getWriter().getUpdateFunctionsBatch().accept(toUpdate);
+        }
+    }
+    
+    /**
+     * 创建端点匹配关系（MATCHES）
+     * 
+     * 策略：
+     * - 只在两端都存在时才创建关系
+     * - 不创建 placeholder 端点
+     * - 双向关系：outbound ↔ inbound
+     */
+    private void createEndpointMatchRelationships(java.util.List<CodeEndpoint> endpoints, CodeGraphContext context) {
+        if (endpoints.isEmpty()) {
+            return;
+        }
+        
+        log.info("开始创建端点匹配关系，共 {} 个端点", endpoints.size());
+        
+        java.util.List<CodeRelationship> matchRelationships = new java.util.ArrayList<>();
+        
+        for (CodeEndpoint endpoint : endpoints) {
+            // 只处理有 normalizedPath 的端点
+            if (endpoint.getNormalizedPath() == null || endpoint.getNormalizedPath().isEmpty()) {
+                log.debug("端点没有 normalizedPath，跳过: {}", endpoint.getId());
+                continue;
+            }
+            
+            // 根据方向查找匹配的对端
+            String targetDirection = "inbound".equals(endpoint.getDirection()) ? "outbound" : "inbound";
+            
+            // 查询数据库中所有匹配的对端端点
+            java.util.List<CodeEndpoint> matchingEndpoints = context.getReader()
+                .getFindEndpointsByNormalizedPath()
+                .apply(endpoint.getNormalizedPath(), targetDirection);
+            
+            log.debug("端点 {} ({}) 找到 {} 个匹配的 {} 端点",
+                endpoint.getPath(), endpoint.getDirection(), 
+                matchingEndpoints.size(), targetDirection);
+            
+            // 为每个匹配的对端创建 MATCHES 关系
+            for (CodeEndpoint matchingEndpoint : matchingEndpoints) {
+                CodeRelationship rel = new CodeRelationship();
+                rel.setId(java.util.UUID.randomUUID().toString());
+                rel.setRelationshipType(RelationshipType.MATCHES);
+                
+                // 关系方向：outbound -> inbound (为了查询方便)
+                if ("outbound".equals(endpoint.getDirection())) {
+                    rel.setFromNodeId(endpoint.getId());
+                    rel.setToNodeId(matchingEndpoint.getId());
+                } else {
+                    rel.setFromNodeId(matchingEndpoint.getId());
+                    rel.setToNodeId(endpoint.getId());
+                }
+                
+                rel.setLanguage("java");
+                matchRelationships.add(rel);
+                
+                log.debug("创建 MATCHES 关系: {} ({}) -> {} ({})",
+                    endpoint.getPath(), endpoint.getDirection(),
+                    matchingEndpoint.getPath(), matchingEndpoint.getDirection());
+            }
+        }
+        
+        // 批量保存 MATCHES 关系
+        if (!matchRelationships.isEmpty()) {
+            context.getWriter().getInsertRelationshipsBatch().accept(matchRelationships);
+            log.info("✓ 端点匹配关系创建完成: 共创建 {} 个 MATCHES 关系", matchRelationships.size());
+        } else {
+            log.info("✓ 没有匹配的端点，无需创建 MATCHES 关系");
         }
     }
     
