@@ -22,14 +22,17 @@ locate:
 
 extract:
   httpMethod:
-    mapping:
+    from: "argument[1]"              # 先尝试从第二个参数提取（用于 exchange）
+    pattern: "HttpMethod\\.(\\w+)"   # 正则提取 HttpMethod.PUT → PUT
+    captureGroup: 1
+    mapping:                         # 提取失败时 fallback 到方法名映射
       getForObject: "GET"
       getForEntity: "GET"
       postForObject: "POST"
       postForEntity: "POST"
       put: "PUT"
       delete: "DELETE"
-      exchange: "DYNAMIC"
+      exchange: "DYNAMIC"            # 如果 pattern 也提取失败，最终返回 DYNAMIC
   
   path:
     from: "argument[0]"

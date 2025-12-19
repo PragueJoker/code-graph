@@ -13,6 +13,8 @@ public class ExtractConfig {
     // 简单提取
     private String from;
     private String trace;
+    private String pattern;        // 正则表达式
+    private Integer captureGroup;  // 捕获组索引（默认 1）
     
     // 映射
     private Map<String, Object> mapping;

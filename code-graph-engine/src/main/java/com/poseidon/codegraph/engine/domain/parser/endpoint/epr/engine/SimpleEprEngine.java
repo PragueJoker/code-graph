@@ -352,20 +352,42 @@ public class SimpleEprEngine {
             TypeDeclaration typeDecl,
             Map<String, String> extractedValues) {
         
-        log.warn("[DEBUG] extractField - config.transform={}, config.from={}", config.getTransform(), config.getFrom());
+        log.debug("[extractField] config.from={}, config.mapping={}, config.pattern={}", 
+            config.getFrom(), config.getMapping() != null, config.getPattern());
         
         String value = null;
         
-        // 1. 简单提取
+        // 1. 优先从 from 提取（支持 pattern 和 mapping fallback）
         if (config.getFrom() != null) {
             value = extractFromPath(config.getFrom(), node, cu, typeDecl, config.getTrace());
-            // 如果提取失败且有默认值，使用默认值
+            
+            // 1.1 应用 pattern 提取（如果配置了）
+            if (value != null && config.getPattern() != null) {
+                String extractedByPattern = applyPattern(value, config.getPattern(), config.getCaptureGroup());
+                if (extractedByPattern != null) {
+                    value = extractedByPattern;
+                    log.debug("[extractField] pattern 提取成功: {}", value);
+                } else {
+                    log.debug("[extractField] pattern 提取失败，保留原值: {}", value);
+                    value = null; // pattern 匹配失败，清空值，尝试 fallback
+                }
+            }
+            
+            // 1.2 如果提取失败且有 mapping，fallback 到 mapping
+            if (value == null && config.getMapping() != null && node instanceof MethodInvocation) {
+                String methodName = ((MethodInvocation) node).getName().getIdentifier();
+                Object mappedValue = config.getMapping().get(methodName);
+                value = mappedValue != null ? mappedValue.toString() : null;
+                log.debug("[extractField] fallback 到 mapping: methodName={}, value={}", methodName, value);
+            }
+            
+            // 1.3 如果还是失败且有默认值，使用默认值
             if (value == null && config.getDefaultValue() != null) {
                 value = config.getDefaultValue().toString();
             }
         }
         
-        // 2. 映射
+        // 2. 仅映射（没有 from）
         else if (config.getMapping() != null && node instanceof MethodInvocation) {
             String methodName = ((MethodInvocation) node).getName().getIdentifier();
             Object mappedValue = config.getMapping().get(methodName);
@@ -392,9 +414,9 @@ public class SimpleEprEngine {
         
         // 应用 transform（如果有）
         if (value != null && config.getTransform() != null) {
-            log.warn("[DEBUG] 应用 transform: {} 到值: {}", config.getTransform(), value);
+            log.debug("[extractField] 应用 transform: {} 到值: {}", config.getTransform(), value);
             String transformedValue = applyTransform(value, config.getTransform());
-            log.warn("[DEBUG] transform 后的值: {}", transformedValue);
+            log.debug("[extractField] transform 后的值: {}", transformedValue);
             value = transformedValue;
         }
         
@@ -428,6 +450,45 @@ public class SimpleEprEngine {
                 log.warn("未知的 transform 类型: {}", transformType);
                 return value;
         }
+    }
+    
+    /**
+     * 应用正则提取
+     * 
+     * @param value 原始值（例如 "HttpMethod.PUT"）
+     * @param pattern 正则表达式（例如 "HttpMethod\\.(\\w+)"）
+     * @param captureGroup 捕获组索引（默认 1）
+     * @return 提取的值（例如 "PUT"），如果匹配失败返回 null
+     */
+    private String applyPattern(String value, String pattern, Integer captureGroup) {
+        if (value == null || pattern == null) {
+            return null;
+        }
+        
+        try {
+            java.util.regex.Pattern regex = java.util.regex.Pattern.compile(pattern);
+            java.util.regex.Matcher matcher = regex.matcher(value);
+            
+            if (matcher.find()) {
+                int group = captureGroup != null ? captureGroup : 1;
+                if (group <= matcher.groupCount()) {
+                    String extracted = matcher.group(group);
+                    log.debug("[applyPattern] 成功提取: pattern={}, value={}, extracted={}", 
+                        pattern, value, extracted);
+                    return extracted;
+                } else {
+                    log.warn("[applyPattern] 捕获组超出范围: group={}, groupCount={}", 
+                        group, matcher.groupCount());
+                }
+            } else {
+                log.debug("[applyPattern] 未匹配: pattern={}, value={}", pattern, value);
+            }
+        } catch (Exception e) {
+            log.error("[applyPattern] 正则匹配失败: pattern={}, value={}, error={}", 
+                pattern, value, e.getMessage());
+        }
+        
+        return null;
     }
     
     /**
@@ -493,11 +554,24 @@ public class SimpleEprEngine {
                         cu, typeDecl, findEnclosingMethod(node)
                     );
                     UniversalValueTracer.TraceResult result = valueTracer.trace(arg, context);
-                    return result.getValue();
+                    String traced = result.getValue();
+                    
+                    // 如果追踪成功，返回追踪值
+                    if (traced != null) {
+                        return traced;
+                    }
+                    
+                    // 追踪失败，fallback 到提取表达式的字符串表示（用于枚举常量等）
+                    String expressionStr = arg.toString();
+                    log.debug("[extractFromPath] 追踪失败，fallback 到表达式字符串: {}", expressionStr);
+                    return expressionStr;
                 } else {
                     // 直接返回字符串
                     if (arg instanceof StringLiteral) {
                         return ((StringLiteral) arg).getLiteralValue();
+                    } else {
+                        // 非字符串字面量，返回表达式字符串
+                        return arg.toString();
                     }
                 }
             }
@@ -811,8 +885,14 @@ public class SimpleEprEngine {
             String path = resolveValue(config.getPath(), values);
             endpoint.setPath(path);
             
-            // 规范化路径
+            // 规范化路径（包含 HTTP 方法）
             String normalizedPath = normalizePathForEndpoint(node, path, endpoint.getDirection());
+            
+            // 将 HTTP 方法添加到 normalizedPath 中（格式：METHOD path）
+            if (endpoint.getHttpMethod() != null && !endpoint.getHttpMethod().isEmpty()) {
+                normalizedPath = endpoint.getHttpMethod() + " " + normalizedPath;
+            }
+            
             endpoint.setNormalizedPath(normalizedPath);
             log.debug("路径规范化: {} → {}", path, normalizedPath);
         }
