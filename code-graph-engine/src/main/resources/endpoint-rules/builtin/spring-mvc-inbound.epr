@@ -36,12 +36,32 @@ extract:
           defaultValue: "GET"
   
   basePath:
-    from: "class.annotation[@RequestMapping].attribute[value]"
-    defaultValue: ""
+    strategies:
+      # 尝试 value 属性
+      - tryConfig:
+          from: "class.annotation[@RequestMapping].attribute[value]"
+        onSuccess: "return"
+      # 尝试 path 属性
+      - tryConfig:
+          from: "class.annotation[@RequestMapping].attribute[path]"
+        onSuccess: "return"
+      # 都失败了，使用默认值
+      - tryConfig:
+          defaultValue: ""
   
   methodPath:
-    from: "method.annotation[.*Mapping$].attribute[value]"
-    defaultValue: ""
+    strategies:
+      # 尝试 value 属性
+      - tryConfig:
+          from: "method.annotation[.*Mapping$].attribute[value]"
+        onSuccess: "return"
+      # 尝试 path 属性
+      - tryConfig:
+          from: "method.annotation[.*Mapping$].attribute[path]"
+        onSuccess: "return"
+      # 都失败了，使用默认值
+      - tryConfig:
+          defaultValue: ""
   
   path:
     combine:

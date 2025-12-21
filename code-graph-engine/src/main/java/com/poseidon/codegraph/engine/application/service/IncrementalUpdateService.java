@@ -209,8 +209,8 @@ public class IncrementalUpdateService {
                 .collect(Collectors.toList())
         );
         
-        context.getReader().setFindEndpointsByNormalizedPath((normalizedPath, direction) -> 
-            endpointRepository.findEndpointsByNormalizedPath(normalizedPath, direction).stream()
+        context.getReader().setFindEndpointsByMatchIdentity((matchIdentity, direction) -> 
+            endpointRepository.findEndpointsByMatchIdentity(matchIdentity, direction).stream()
                 .map(CodeGraphConverter::toDomain)
                 .collect(Collectors.toList())
         );

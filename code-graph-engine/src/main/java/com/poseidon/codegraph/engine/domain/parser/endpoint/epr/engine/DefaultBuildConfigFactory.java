@@ -47,7 +47,7 @@ public class DefaultBuildConfigFactory {
                 break;
                 
             case "kafka-producer":
-                config.setEndpointType("KAFKA");
+                config.setEndpointType("MQ");
                 config.setDirection("outbound");
                 config.setIsExternal(true);
                 config.setTopic("${topic}");
@@ -58,7 +58,7 @@ public class DefaultBuildConfigFactory {
                 break;
                 
             case "kafka-consumer":
-                config.setEndpointType("KAFKA");
+                config.setEndpointType("MQ");
                 config.setDirection("inbound");
                 config.setIsExternal(false);
                 config.setTopic("${topic}");

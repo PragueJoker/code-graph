@@ -85,7 +85,7 @@ public class EndpointProcessor implements ASTNodeProcessor {
                 // 添加端点到 graph（暂时不建立关系）
                 context.getGraph().addEndpoint(endpoint);
                 
-                log.debug("提取端点: {} {}", endpoint.getHttpMethod(), endpoint.getPath());
+                log.debug("提取端点: {} {}", endpoint.getEndpointType(), endpoint.getName());
             }
             
         } catch (Exception e) {
@@ -118,14 +118,12 @@ public class EndpointProcessor implements ASTNodeProcessor {
                 buildEndpointRelationship(endpoint, function, context);
                 
                 relationshipCount++;
-                log.info("✓ 端点: {} {} → 函数: {}", 
-                    endpoint.getHttpMethod(),
-                    endpoint.getPath(), 
+                log.info("✓ 端点: {} → 函数: {}", 
+                    endpoint.getName(), 
                     function.getName());
             } else {
-                log.warn("✗ 端点未找到对应函数: {} {}", 
-                    endpoint.getHttpMethod(), 
-                    endpoint.getPath());
+                log.warn("✗ 端点未找到对应函数: {}", 
+                    endpoint.getName());
             }
         }
         
@@ -156,7 +154,7 @@ public class EndpointProcessor implements ASTNodeProcessor {
         // 策略 1：通过 functionId 查找
         String functionId = endpoint.getFunctionId();
         log.debug("查找端点对应函数: endpoint={}, functionId={}, startLine={}", 
-            endpoint.getPath(), functionId, endpoint.getStartLine());
+            endpoint.getName(), functionId, endpoint.getStartLine());
         
         if (functionId != null && !functionId.isEmpty()) {
             log.debug("尝试通过 functionId 查找: {}", functionId);

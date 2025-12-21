@@ -1,6 +1,12 @@
 package com.poseidon.codegraph.engine.domain.parser.endpoint.epr.engine;
 
 import com.poseidon.codegraph.engine.domain.model.CodeEndpoint;
+import com.poseidon.codegraph.engine.domain.model.CodeFunction;
+import com.poseidon.codegraph.engine.domain.model.EndpointType;
+import com.poseidon.codegraph.engine.domain.model.endpoint.DbEndpoint;
+import com.poseidon.codegraph.engine.domain.model.endpoint.HttpEndpoint;
+import com.poseidon.codegraph.engine.domain.model.endpoint.MqEndpoint;
+import com.poseidon.codegraph.engine.domain.model.endpoint.RedisEndpoint;
 import com.poseidon.codegraph.engine.domain.parser.endpoint.epr.model.*;
 import com.poseidon.codegraph.engine.domain.parser.endpoint.tracker.UniversalValueTracer;
 import lombok.extern.slf4j.Slf4j;
@@ -9,6 +15,7 @@ import org.eclipse.jdt.core.dom.*;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * 简化版 EPR 执行引擎
@@ -50,7 +57,7 @@ public class SimpleEprEngine {
                     CodeEndpoint endpoint = extractEndpoint(rule, cu, typeDecl, method, projectFilePath);
                     if (endpoint != null) {
                         endpoints.add(endpoint);
-                        log.info("    ✓ 成功提取端点: {} {}", endpoint.getHttpMethod(), endpoint.getPath());
+                        log.info("    ✓ 成功提取端点: {} {}", endpoint.getEndpointType(), endpoint.getName());
                     }
                 } else {
                     log.debug("    ✗ 方法 {} 不匹配条件", methodName);
@@ -862,54 +869,151 @@ public class SimpleEprEngine {
      * 构建端点
      */
     private CodeEndpoint buildEndpoint(BuildConfig config, Map<String, String> values, String projectFilePath, String functionId, CompilationUnit cu, ASTNode node) {
-        CodeEndpoint endpoint = new CodeEndpoint();
+        String typeStr = resolveValue(config.getEndpointType(), values);
+        CodeEndpoint endpoint = createEndpointInstance(typeStr);
+        if (endpoint == null) {
+            return null; // 类型解析失败或不支持
+        }
         
         // 基本属性
-        endpoint.setEndpointType(resolveValue(config.getEndpointType(), values));
-        endpoint.setDirection(resolveValue(config.getDirection(), values));
+        String direction = resolveValue(config.getDirection(), values);
+        if (direction == null) {
+            log.warn("端点方向解析失败，跳过该端点");
+            return null;
+        }
+        endpoint.setDirection(direction);
         endpoint.setIsExternal(config.getIsExternal());
         endpoint.setProjectFilePath(projectFilePath);
-        endpoint.setFunctionId(functionId);  // 设置 functionId
-        
+
+        // 设置关联函数（创建一个仅包含 ID 的临时函数对象）
+        if (functionId != null) {
+            CodeFunction func = new CodeFunction();
+            func.setId(functionId);
+            endpoint.setFunction(func);
+        }
+
         // 设置位置信息
         if (cu != null && node != null) {
             endpoint.setStartLine(cu.getLineNumber(node.getStartPosition()));
             endpoint.setEndLine(cu.getLineNumber(node.getStartPosition() + node.getLength()));
         }
         
-        // HTTP 属性
-        if (config.getHttpMethod() != null) {
-            endpoint.setHttpMethod(resolveValue(config.getHttpMethod(), values));
+        // 通用属性
+        if (config.getServiceName() != null) {
+            endpoint.setServiceName(resolveValue(config.getServiceName(), values));
         }
-        if (config.getPath() != null) {
-            String path = resolveValue(config.getPath(), values);
-            endpoint.setPath(path);
-            
-            // 规范化路径（包含 HTTP 方法）
-            String normalizedPath = normalizePathForEndpoint(node, path, endpoint.getDirection());
-            
-            // 将 HTTP 方法添加到 normalizedPath 中（格式：METHOD path）
-            if (endpoint.getHttpMethod() != null && !endpoint.getHttpMethod().isEmpty()) {
-                normalizedPath = endpoint.getHttpMethod() + " " + normalizedPath;
-            }
-            
-            endpoint.setNormalizedPath(normalizedPath);
-            log.debug("路径规范化: {} → {}", path, normalizedPath);
+        if (config.getParseLevel() != null) {
+            endpoint.setParseLevel(resolveValue(config.getParseLevel(), values));
         }
         
-        // Kafka 属性
-        if (config.getTopic() != null) {
-            endpoint.setTopic(resolveValue(config.getTopic(), values));
-        }
-        if (config.getOperation() != null) {
-            endpoint.setOperation(resolveValue(config.getOperation(), values));
+        // 根据类型设置特定属性
+        if (endpoint instanceof HttpEndpoint http) {
+            String method = config.getHttpMethod() != null ? resolveValue(config.getHttpMethod(), values) : null;
+            String path = config.getPath() != null ? resolveValue(config.getPath(), values) : null;
+            
+            if (path == null) {
+                log.warn("HTTP 端点路径解析失败，跳过该端点");
+                return null;
+            }
+            
+            http.setHttpMethod(method != null ? method : "UNKNOWN");
+            http.setPath(path);
+            
+            // 规范化路径
+            String normalizedPath = normalizePathForEndpoint(node, path, endpoint.getDirection());
+            http.setNormalizedPath(normalizedPath);
+            log.debug("路径规范化: {} → {}", path, normalizedPath);
+            
+        } else if (endpoint instanceof MqEndpoint mq) {
+            String topic = config.getTopic() != null ? resolveValue(config.getTopic(), values) : null;
+            if (topic == null) {
+                log.warn("MQ 端点 Topic 解析失败，跳过该端点");
+                return null;
+            }
+            mq.setTopic(topic);
+            mq.setOperation(resolveValue(config.getOperation(), values));
+            
+            // 默认从 type 推断 brokerType
+            if (typeStr != null && typeStr.toUpperCase().contains("KAFKA")) {
+                mq.setBrokerType("KAFKA");
+            } else if (typeStr != null && typeStr.toUpperCase().contains("ROCKETMQ")) {
+                mq.setBrokerType("ROCKETMQ");
+            }
+        } else if (endpoint instanceof RedisEndpoint redis) {
+            String keyPattern = config.getKeyPattern() != null ? resolveValue(config.getKeyPattern(), values) : null;
+            if (keyPattern == null) {
+                log.warn("Redis 端点 KeyPattern 解析失败，跳过该端点");
+                return null;
+            }
+            redis.setKeyPattern(keyPattern);
+            redis.setDataStructure(resolveValue(config.getDataStructure(), values));
+            
+            // 尝试从 values 提取 command
+            if (values.containsKey("command")) {
+                redis.setCommand(values.get("command"));
+            }
+        } else if (endpoint instanceof DbEndpoint db) {
+            String tableName = config.getTableName() != null ? resolveValue(config.getTableName(), values) : null;
+            if (tableName == null) {
+                log.warn("DB 端点表名解析失败，跳过该端点");
+                return null;
+            }
+            db.setTableName(tableName);
+            
+            // 尝试从 values 提取 dbOperation
+            if (values.containsKey("dbOperation")) {
+                db.setDbOperation(values.get("dbOperation"));
+            } else if (values.containsKey("operation")) {
+                db.setDbOperation(values.get("operation"));
+            }
         }
         
         // 生成 ID
         String id = generateEndpointId(endpoint);
         endpoint.setId(id);
         
+        // 计算并设置匹配标识（由子类根据自身业务字段计算）
+        String matchIdentity = endpoint.computeMatchIdentity();
+        endpoint.setMatchIdentity(matchIdentity);
+        
+        // 设置名称（用于展示）
+        endpoint.setName(matchIdentity);
+        
         return endpoint;
+    }
+
+    // 移除之前的 generateMatchIdentity 方法，逻辑已移入子类 computeMatchIdentity 中
+
+    /**
+     * 根据字符串创建对应的端点实例
+     */
+    private CodeEndpoint createEndpointInstance(String typeStr) {
+        if (typeStr == null) {
+            log.warn("端点类型为空，无法创建端点实例");
+            return null;
+        }
+        
+        switch (typeStr.toUpperCase()) {
+            case "HTTP":
+            case "HTTP-INBOUND":
+            case "HTTP-OUTBOUND":
+                return new HttpEndpoint();
+            case "MQ":
+            case "KAFKA":
+            case "KAFKA-PRODUCER":
+            case "KAFKA-CONSUMER":
+            case "ROCKETMQ":
+                return new MqEndpoint();
+            case "REDIS":
+            case "REDIS-ACCESS":
+                return new RedisEndpoint();
+            case "DB":
+            case "DB-ACCESS":
+                return new DbEndpoint();
+            default:
+                log.warn("未知的端点类型: {}, 跳过该端点", typeStr);
+                return null;
+        }
     }
     
     /**
@@ -1022,13 +1126,20 @@ public class SimpleEprEngine {
     
     /**
      * 解析值中的变量引用
+     * 如果模板中引用的变量在 values 中不存在，则返回 null，表示解析失败
      */
     private String resolveValue(String template, Map<String, String> values) {
         if (template == null) {
             return null;
         }
         
-        // 替换 ${varName}
+        // 如果模板只是一个简单的变量引用，如 "${path}"
+        if (template.startsWith("${") && template.endsWith("}") && !template.substring(2, template.length() - 1).contains("${")) {
+            String varName = template.substring(2, template.length() - 1);
+            return values.get(varName); // 如果不存在，直接返回 null
+        }
+        
+        // 复杂模板替换
         Pattern pattern = Pattern.compile("\\$\\{([^}]+)\\}");
         Matcher matcher = pattern.matcher(template);
         
@@ -1036,7 +1147,11 @@ public class SimpleEprEngine {
         while (matcher.find()) {
             String varName = matcher.group(1);
             String value = values.get(varName);
-            matcher.appendReplacement(result, value != null ? value : "");
+            if (value == null) {
+                log.warn("变量 ${} 未能解析，模板: {}", varName, template);
+                return null; // 只要有一个变量解析不出，整个值就算解析失败
+            }
+            matcher.appendReplacement(result, Matcher.quoteReplacement(value));
         }
         matcher.appendTail(result);
         
@@ -1047,21 +1162,37 @@ public class SimpleEprEngine {
      * 生成端点 ID
      */
     private String generateEndpointId(CodeEndpoint endpoint) {
-        String type = endpoint.getEndpointType();
+        EndpointType type = endpoint.getEndpointType();
         String direction = endpoint.getDirection();
         
-        if ("HTTP".equals(type)) {
+        if (type == EndpointType.HTTP && endpoint instanceof HttpEndpoint) {
+            HttpEndpoint http = (HttpEndpoint) endpoint;
             return String.format("%s:%s:%s:%s",
                 direction,
                 type,
-                endpoint.getHttpMethod(),
-                endpoint.getPath()
+                http.getHttpMethod(),
+                http.getPath()
             );
-        } else if ("KAFKA".equals(type)) {
+        } else if (type == EndpointType.MQ && endpoint instanceof MqEndpoint) {
+            MqEndpoint mq = (MqEndpoint) endpoint;
             return String.format("%s:%s:%s",
                 direction,
                 type,
-                endpoint.getTopic()
+                mq.getTopic()
+            );
+        } else if (type == EndpointType.REDIS && endpoint instanceof RedisEndpoint) {
+            RedisEndpoint redis = (RedisEndpoint) endpoint;
+            return String.format("%s:%s:%s",
+                direction,
+                type,
+                redis.getKeyPattern()
+            );
+        } else if (type == EndpointType.DB && endpoint instanceof DbEndpoint) {
+            DbEndpoint db = (DbEndpoint) endpoint;
+            return String.format("%s:%s:%s",
+                direction,
+                type,
+                db.getTableName()
             );
         }
         

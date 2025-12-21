@@ -50,13 +50,16 @@ public class Neo4jCodeEndpointRepository implements CodeEndpointRepository {
                 normalizedPath: endpoint.normalizedPath,
                 topic: endpoint.topic,
                 operation: endpoint.operation,
+                brokerType: endpoint.brokerType,
                 keyPattern: endpoint.keyPattern,
+                command: endpoint.command,
                 dataStructure: endpoint.dataStructure,
                 tableName: endpoint.tableName,
                 dbOperation: endpoint.dbOperation,
                 serviceName: endpoint.serviceName,
                 parseLevel: endpoint.parseLevel,
-                targetService: endpoint.targetService
+                targetService: endpoint.targetService,
+                matchIdentity: endpoint.matchIdentity
             })
             """;
         
@@ -94,13 +97,16 @@ public class Neo4jCodeEndpointRepository implements CodeEndpointRepository {
                 e.normalizedPath = endpoint.normalizedPath,
                 e.topic = endpoint.topic,
                 e.operation = endpoint.operation,
+                e.brokerType = endpoint.brokerType,
                 e.keyPattern = endpoint.keyPattern,
+                e.command = endpoint.command,
                 e.dataStructure = endpoint.dataStructure,
                 e.tableName = endpoint.tableName,
                 e.dbOperation = endpoint.dbOperation,
                 e.serviceName = endpoint.serviceName,
                 e.parseLevel = endpoint.parseLevel,
-                e.targetService = endpoint.targetService
+                e.targetService = endpoint.targetService,
+                e.matchIdentity = endpoint.matchIdentity
             """;
         
         try (Session session = driver.session()) {
@@ -165,20 +171,20 @@ public class Neo4jCodeEndpointRepository implements CodeEndpointRepository {
     }
     
     @Override
-    public List<CodeEndpointDO> findEndpointsByNormalizedPath(String normalizedPath, String direction) {
+    public List<CodeEndpointDO> findEndpointsByMatchIdentity(String matchIdentity, String direction) {
         String cypher;
         Map<String, Object> params = new HashMap<>();
-        params.put("normalizedPath", normalizedPath);
+        params.put("matchIdentity", matchIdentity);
         
         if (direction != null && !direction.isEmpty()) {
             cypher = """
-                MATCH (e:CodeEndpoint {normalizedPath: $normalizedPath, direction: $direction})
+                MATCH (e:CodeEndpoint {matchIdentity: $matchIdentity, direction: $direction})
                 RETURN e
                 """;
             params.put("direction", direction);
         } else {
             cypher = """
-                MATCH (e:CodeEndpoint {normalizedPath: $normalizedPath})
+                MATCH (e:CodeEndpoint {matchIdentity: $matchIdentity})
                 RETURN e
                 """;
         }
@@ -187,9 +193,9 @@ public class Neo4jCodeEndpointRepository implements CodeEndpointRepository {
             Result result = session.run(cypher, params);
             return parseEndpointsFromResult(result);
         } catch (Exception e) {
-            log.error("查询端点失败: normalizedPath={}, direction={}, error={}", 
-                normalizedPath, direction, e.getMessage(), e);
-            throw new RuntimeException("查询端点失败: " + normalizedPath, e);
+            log.error("查询端点失败: matchIdentity={}, direction={}, error={}", 
+                matchIdentity, direction, e.getMessage(), e);
+            throw new RuntimeException("查询端点失败: " + matchIdentity, e);
         }
     }
     
@@ -219,13 +225,16 @@ public class Neo4jCodeEndpointRepository implements CodeEndpointRepository {
             endpoint.setNormalizedPath(node.get("normalizedPath").asString(null));
             endpoint.setTopic(node.get("topic").asString(null));
             endpoint.setOperation(node.get("operation").asString(null));
+            endpoint.setBrokerType(node.get("brokerType").asString(null));
             endpoint.setKeyPattern(node.get("keyPattern").asString(null));
+            endpoint.setCommand(node.get("command").asString(null));
             endpoint.setDataStructure(node.get("dataStructure").asString(null));
             endpoint.setTableName(node.get("tableName").asString(null));
             endpoint.setDbOperation(node.get("dbOperation").asString(null));
             endpoint.setServiceName(node.get("serviceName").asString(null));
             endpoint.setParseLevel(node.get("parseLevel").asString(null));
             endpoint.setTargetService(node.get("targetService").asString(null));
+            endpoint.setMatchIdentity(node.get("matchIdentity").asString(null));
             // functionId 不再持久化
             endpoints.add(endpoint);
         });
@@ -256,13 +265,16 @@ public class Neo4jCodeEndpointRepository implements CodeEndpointRepository {
         map.put("normalizedPath", endpoint.getNormalizedPath());
         map.put("topic", endpoint.getTopic());
         map.put("operation", endpoint.getOperation());
+        map.put("brokerType", endpoint.getBrokerType());
         map.put("keyPattern", endpoint.getKeyPattern());
+        map.put("command", endpoint.getCommand());
         map.put("dataStructure", endpoint.getDataStructure());
         map.put("tableName", endpoint.getTableName());
         map.put("dbOperation", endpoint.getDbOperation());
         map.put("serviceName", endpoint.getServiceName());
         map.put("parseLevel", endpoint.getParseLevel());
         map.put("targetService", endpoint.getTargetService());
+        map.put("matchIdentity", endpoint.getMatchIdentity());
         // functionId 不再持久化
         return map;
     }

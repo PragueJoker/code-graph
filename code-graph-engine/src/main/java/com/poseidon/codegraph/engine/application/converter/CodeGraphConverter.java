@@ -2,6 +2,7 @@ package com.poseidon.codegraph.engine.application.converter;
 
 import com.poseidon.codegraph.engine.application.model.*;
 import com.poseidon.codegraph.engine.domain.model.*;
+import com.poseidon.codegraph.engine.domain.model.endpoint.*;
 
 /**
  * 代码图谱转换器
@@ -85,7 +86,54 @@ public class CodeGraphConverter {
     public static CodeEndpoint toDomain(CodeEndpointDO dobj) {
         if (dobj == null) return null;
         
-        CodeEndpoint domain = new CodeEndpoint();
+        // 1. 确定端点类型
+        EndpointType type = EndpointType.UNKNOWN;
+        if (dobj.getEndpointType() != null) {
+            try {
+                type = EndpointType.valueOf(dobj.getEndpointType());
+            } catch (IllegalArgumentException e) {
+                // 忽略未知类型
+            }
+        }
+        
+        // 2. 创建正确的子类实例
+        CodeEndpoint domain;
+        switch (type) {
+            case HTTP:
+                HttpEndpoint http = new HttpEndpoint();
+                http.setHttpMethod(dobj.getHttpMethod());
+                http.setPath(dobj.getPath());
+                http.setNormalizedPath(dobj.getNormalizedPath());
+                domain = http;
+                break;
+            case MQ:
+                MqEndpoint mq = new MqEndpoint();
+                mq.setTopic(dobj.getTopic());
+                mq.setOperation(dobj.getOperation());
+                mq.setBrokerType(dobj.getBrokerType());
+                domain = mq;
+                break;
+            case REDIS:
+                RedisEndpoint redis = new RedisEndpoint();
+                redis.setKeyPattern(dobj.getKeyPattern());
+                redis.setDataStructure(dobj.getDataStructure());
+                redis.setCommand(dobj.getCommand());
+                domain = redis;
+                break;
+            case DB:
+                DbEndpoint db = new DbEndpoint();
+                db.setTableName(dobj.getTableName());
+                db.setDbOperation(dobj.getDbOperation());
+                domain = db;
+                break;
+            default:
+                // 兜底方案
+                HttpEndpoint fallback = new HttpEndpoint();
+                fallback.setEndpointType(EndpointType.UNKNOWN);
+                domain = fallback;
+        }
+        
+        // 3. 填充公共字段
         domain.setId(dobj.getId());
         domain.setName(dobj.getName());
         domain.setQualifiedName(dobj.getQualifiedName());
@@ -95,22 +143,13 @@ public class CodeGraphConverter {
         domain.setLanguage(dobj.getLanguage());
         domain.setStartLine(dobj.getStartLine());
         domain.setEndLine(dobj.getEndLine());
-        domain.setEndpointType(dobj.getEndpointType());
         domain.setDirection(dobj.getDirection());
         domain.setIsExternal(dobj.getIsExternal());
-        domain.setHttpMethod(dobj.getHttpMethod());
-        domain.setPath(dobj.getPath());
-        domain.setNormalizedPath(dobj.getNormalizedPath());
-        domain.setTopic(dobj.getTopic());
-        domain.setOperation(dobj.getOperation());
-        domain.setKeyPattern(dobj.getKeyPattern());
-        domain.setDataStructure(dobj.getDataStructure());
-        domain.setTableName(dobj.getTableName());
-        domain.setDbOperation(dobj.getDbOperation());
         domain.setServiceName(dobj.getServiceName());
         domain.setParseLevel(dobj.getParseLevel());
         domain.setTargetService(dobj.getTargetService());
-        // functionId 是临时字段，不从 DO 转换
+        domain.setMatchIdentity(dobj.getMatchIdentity());
+        
         return domain;
     }
     
@@ -200,22 +239,41 @@ public class CodeGraphConverter {
         dobj.setLanguage(domain.getLanguage());
         dobj.setStartLine(domain.getStartLine());
         dobj.setEndLine(domain.getEndLine());
-        dobj.setEndpointType(domain.getEndpointType());
+        
+        // 设置端点类型字符串
+        if (domain.getEndpointType() != null) {
+            dobj.setEndpointType(domain.getEndpointType().name());
+        }
+        
         dobj.setDirection(domain.getDirection());
         dobj.setIsExternal(domain.getIsExternal());
-        dobj.setHttpMethod(domain.getHttpMethod());
-        dobj.setPath(domain.getPath());
-        dobj.setNormalizedPath(domain.getNormalizedPath());
-        dobj.setTopic(domain.getTopic());
-        dobj.setOperation(domain.getOperation());
-        dobj.setKeyPattern(domain.getKeyPattern());
-        dobj.setDataStructure(domain.getDataStructure());
-        dobj.setTableName(domain.getTableName());
-        dobj.setDbOperation(domain.getDbOperation());
         dobj.setServiceName(domain.getServiceName());
         dobj.setParseLevel(domain.getParseLevel());
         dobj.setTargetService(domain.getTargetService());
-        // functionId 是临时字段，不转换到 DO
+        dobj.setMatchIdentity(domain.getMatchIdentity());
+        
+        // 根据子类类型设置特定字段
+        if (domain instanceof HttpEndpoint) {
+            HttpEndpoint http = (HttpEndpoint) domain;
+            dobj.setHttpMethod(http.getHttpMethod());
+            dobj.setPath(http.getPath());
+            dobj.setNormalizedPath(http.getNormalizedPath());
+        } else if (domain instanceof MqEndpoint) {
+            MqEndpoint mq = (MqEndpoint) domain;
+            dobj.setTopic(mq.getTopic());
+            dobj.setOperation(mq.getOperation());
+            dobj.setBrokerType(mq.getBrokerType());
+        } else if (domain instanceof RedisEndpoint) {
+            RedisEndpoint redis = (RedisEndpoint) domain;
+            dobj.setKeyPattern(redis.getKeyPattern());
+            dobj.setDataStructure(redis.getDataStructure());
+            dobj.setCommand(redis.getCommand());
+        } else if (domain instanceof DbEndpoint) {
+            DbEndpoint db = (DbEndpoint) domain;
+            dobj.setTableName(db.getTableName());
+            dobj.setDbOperation(db.getDbOperation());
+        }
+        
         return dobj;
     }
 }

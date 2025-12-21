@@ -77,8 +77,8 @@ public class GraphReader {
     private Function<String, java.util.List<com.poseidon.codegraph.engine.domain.model.CodeEndpoint>> findEndpointsByProjectFilePath;
     
     /**
-     * 根据 normalizedPath 和 direction 查找端点
-     * Input: NormalizedPathQuery -> Output: List<CodeEndpoint>
+     * 根据 matchIdentity 和 direction 查找端点
+     * Input: (matchIdentity, direction) -> Output: List<CodeEndpoint>
      */
-    private java.util.function.BiFunction<String, String, java.util.List<com.poseidon.codegraph.engine.domain.model.CodeEndpoint>> findEndpointsByNormalizedPath;
+    private java.util.function.BiFunction<String, String, java.util.List<com.poseidon.codegraph.engine.domain.model.CodeEndpoint>> findEndpointsByMatchIdentity;
 }

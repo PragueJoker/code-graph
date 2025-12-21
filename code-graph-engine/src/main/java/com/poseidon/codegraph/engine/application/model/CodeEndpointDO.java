@@ -29,12 +29,14 @@ public class CodeEndpointDO {
     private String path;
     private String normalizedPath;
     
-    // Kafka 相关
+    // MQ 相关
     private String topic;
     private String operation;
+    private String brokerType; // KAFKA, ROCKETMQ
     
     // Redis 相关
     private String keyPattern;
+    private String command;
     private String dataStructure;
     
     // DB 相关
@@ -45,5 +47,6 @@ public class CodeEndpointDO {
     private String serviceName;
     private String parseLevel;
     private String targetService;
+    private String matchIdentity;
 }
 

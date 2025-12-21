@@ -213,9 +213,9 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
         java.util.List<CodeRelationship> matchRelationships = new java.util.ArrayList<>();
         
         for (CodeEndpoint endpoint : endpoints) {
-            // 只处理有 normalizedPath 的端点
-            if (endpoint.getNormalizedPath() == null || endpoint.getNormalizedPath().isEmpty()) {
-                log.debug("端点没有 normalizedPath，跳过: {}", endpoint.getId());
+            // 只处理有 matchIdentity 的端点
+            if (endpoint.getMatchIdentity() == null || endpoint.getMatchIdentity().isEmpty()) {
+                log.debug("端点没有 matchIdentity，跳过: {}", endpoint.getId());
                 continue;
             }
             
@@ -224,11 +224,11 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
             
             // 查询数据库中所有匹配的对端端点
             java.util.List<CodeEndpoint> matchingEndpoints = context.getReader()
-                .getFindEndpointsByNormalizedPath()
-                .apply(endpoint.getNormalizedPath(), targetDirection);
+                .getFindEndpointsByMatchIdentity()
+                .apply(endpoint.getMatchIdentity(), targetDirection);
             
             log.debug("端点 {} ({}) 找到 {} 个匹配的 {} 端点",
-                endpoint.getPath(), endpoint.getDirection(), 
+                endpoint.getName(), endpoint.getDirection(), 
                 matchingEndpoints.size(), targetDirection);
             
             // 为每个匹配的对端创建 MATCHES 关系
@@ -250,8 +250,8 @@ public abstract class AbstractChangeProcessor implements CodeChangeProcessor {
                 matchRelationships.add(rel);
                 
                 log.debug("创建 MATCHES 关系: {} ({}) -> {} ({})",
-                    endpoint.getPath(), endpoint.getDirection(),
-                    matchingEndpoint.getPath(), matchingEndpoint.getDirection());
+                    endpoint.getName(), endpoint.getDirection(),
+                    matchingEndpoint.getName(), matchingEndpoint.getDirection());
             }
         }
         
