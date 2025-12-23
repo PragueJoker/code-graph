@@ -315,14 +315,14 @@ public class SimpleEprEngine {
         if (config.getFrom() != null && "auto".equals(config.getTrace())) {
             List<String> values = extractFromPathPossibleValues(config.getFrom(), node, cu, typeDecl, projectFilePath, absoluteFilePath);
             
-            // 如果有 transform，应用到所有值
+            // 如果有 transform，应用到所有值并去重
             if (values != null && !values.isEmpty() && config.getTransform() != null) {
                 log.debug("[extractFieldValues] 为 {} 个可能值应用 transform: {}", values.size(), config.getTransform());
-                List<String> transformedValues = new ArrayList<>();
+                java.util.Set<String> transformedSet = new java.util.LinkedHashSet<>();
                 for (String val : values) {
-                    transformedValues.add(applyTransform(val, config.getTransform()));
+                    transformedSet.add(applyTransform(val, config.getTransform()));
                 }
-                return transformedValues;
+                return new java.util.ArrayList<>(transformedSet);
             }
             return values;
         }
@@ -361,9 +361,12 @@ public class SimpleEprEngine {
             String fieldName = entry.getKey();
             List<String> values = entry.getValue();
             
+            // 如果该字段有多个可能值，先进行去重
+            java.util.Set<String> uniqueValues = new java.util.LinkedHashSet<>(values);
+            
             List<Map<String, String>> nextBatch = new ArrayList<>();
             for (Map<String, String> combination : results) {
-                for (String value : values) {
+                for (String value : uniqueValues) {
                     Map<String, String> newCombination = new HashMap<>(combination);
                     newCombination.put(fieldName, value);
                     nextBatch.add(newCombination);
