@@ -32,3 +32,4 @@ public class ScopeConfig {
     private List<String> classAnnotations;
 }
 
+

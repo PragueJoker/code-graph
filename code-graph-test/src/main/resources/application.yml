@@ -10,6 +10,11 @@ codegraph:
   engine:
     url: http://localhost:8081
 
+user:
+  service:
+    url: http://prod-user-service:8080/v1
+    extra-path: /internal/v1
+
 # 日志配置
 logging:
   level:

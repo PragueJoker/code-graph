@@ -12,10 +12,10 @@ import com.poseidon.codegraph.engine.domain.parser.endpoint.tracker.UniversalVal
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jdt.core.dom.*;
 
+import java.io.File;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * 简化版 EPR 执行引擎
@@ -33,7 +33,8 @@ public class SimpleEprEngine {
             EndpointParseRule rule,
             CompilationUnit cu,
             TypeDeclaration typeDecl,
-            String projectFilePath) {
+            String projectFilePath,
+            String absoluteFilePath) {
         
         List<CodeEndpoint> endpoints = new ArrayList<>();
         
@@ -54,10 +55,12 @@ public class SimpleEprEngine {
                 
                 if (matchesConditions(method, locate.getWhere(), typeDecl)) {
                     log.debug("    ✓ 方法 {} 匹配条件", methodName);
-                    CodeEndpoint endpoint = extractEndpoint(rule, cu, typeDecl, method, projectFilePath);
-                    if (endpoint != null) {
-                        endpoints.add(endpoint);
-                        log.info("    ✓ 成功提取端点: {} {}", endpoint.getEndpointType(), endpoint.getName());
+                    List<CodeEndpoint> extracted = extractEndpoints(rule, cu, typeDecl, method, projectFilePath, absoluteFilePath);
+                    if (!extracted.isEmpty()) {
+                        endpoints.addAll(extracted);
+                        for (CodeEndpoint endpoint : extracted) {
+                            log.info("    ✓ 成功提取端点: {} {}", endpoint.getEndpointType(), endpoint.getName());
+                        }
                     }
                 } else {
                     log.debug("    ✗ 方法 {} 不匹配条件", methodName);
@@ -71,10 +74,8 @@ public class SimpleEprEngine {
                         @Override
                         public boolean visit(MethodInvocation invocation) {
                             if (matchesConditions(invocation, locate.getWhere(), typeDecl)) {
-                                CodeEndpoint endpoint = extractEndpoint(rule, cu, typeDecl, invocation, projectFilePath);
-                                if (endpoint != null) {
-                                    endpoints.add(endpoint);
-                                }
+                                List<CodeEndpoint> extracted = extractEndpoints(rule, cu, typeDecl, invocation, projectFilePath, absoluteFilePath);
+                                endpoints.addAll(extracted);
                             }
                             return true;
                         }
@@ -170,6 +171,7 @@ public class SimpleEprEngine {
     /**
      * 获取节点的修饰符列表
      */
+    @SuppressWarnings("unchecked")
     private List<IExtendedModifier> getModifiers(ASTNode node) {
         if (node instanceof MethodDeclaration) {
             return ((MethodDeclaration) node).modifiers();
@@ -218,36 +220,58 @@ public class SimpleEprEngine {
     /**
      * 从节点中提取端点
      */
-    private CodeEndpoint extractEndpoint(
+    private List<CodeEndpoint> extractEndpoints(
             EndpointParseRule rule,
             CompilationUnit cu,
             TypeDeclaration typeDecl,
             ASTNode node,
-            String projectFilePath) {
+            String projectFilePath,
+            String absoluteFilePath) {
         
         try {
-            // 提取所有字段
-            Map<String, String> extractedValues = new HashMap<>();
+            // 提取所有字段的基础值列表
+            Map<String, List<String>> fieldPossibleValues = new HashMap<>();
             
             log.debug("    开始提取字段，共 {} 个字段配置", rule.getExtract().size());
             
+            // 第一步：先提取非 combine 字段
             for (Map.Entry<String, ExtractConfig> entry : rule.getExtract().entrySet()) {
                 String fieldName = entry.getKey();
                 ExtractConfig config = entry.getValue();
                 
-                log.debug("      提取字段: {}", fieldName);
-                String value = extractField(config, node, cu, typeDecl, extractedValues);
-                if (value != null) {
-                    extractedValues.put(fieldName, value);
-                    log.info("      ✓ 提取成功: {} = {}", fieldName, value);
-                } else {
-                    log.warn("      ✗ 提取失败: {}", fieldName);
+                if (config.getCombine() == null) {
+                    log.debug("      提取基础字段: {}", fieldName);
+                    List<String> values = extractFieldValues(config, node, cu, typeDecl, projectFilePath, absoluteFilePath);
+                    if (values != null && !values.isEmpty()) {
+                        fieldPossibleValues.put(fieldName, values);
+                    }
+                }
+            }
+
+            // 第二步：生成组合，然后为每个组合处理 combine 字段
+            List<Map<String, String>> combinations = cartesianProduct(fieldPossibleValues);
+            log.info("    生成 {} 种基础字段组合", combinations.size());
+
+            // 第三步：处理 combine 字段（如果有）
+            for (Map.Entry<String, ExtractConfig> entry : rule.getExtract().entrySet()) {
+                String fieldName = entry.getKey();
+                ExtractConfig config = entry.getValue();
+                
+                if (config.getCombine() != null) {
+                    log.debug("      处理 combine 字段: {}", fieldName);
+                    for (Map<String, String> combination : combinations) {
+                        String combinedValue = combineValues(config.getCombine(), combination);
+                        if (combinedValue != null) {
+                            // 由于目前不支持 combine 字段产生多值，我们直接把结果放进组合中
+                            combination.put(fieldName, combinedValue);
+                        }
+                    }
                 }
             }
             
-            log.info("    提取的所有字段: {}", extractedValues);
+            List<CodeEndpoint> results = new ArrayList<>();
             
-            // 获取有效的 BuildConfig（优先使用显式配置，否则根据 type 生成默认配置）
+            // 获取有效的 BuildConfig
             BuildConfig buildConfig = DefaultBuildConfigFactory.getEffectiveBuildConfig(
                 rule.getType(), 
                 rule.getBuild()
@@ -255,22 +279,99 @@ public class SimpleEprEngine {
             
             if (buildConfig == null) {
                 log.warn("规则 {} 没有 build 配置且 type 无效，跳过", rule.getName());
-                return null;
+                return results;
             }
             
-            // 提取 functionId（如果节点是 MethodDeclaration）
+            // 提取 functionId
             String functionId = extractFunctionId(node, typeDecl);
             
-            // 提取行号
-            int startLine = cu.getLineNumber(node.getStartPosition());
+            // 为每种组合创建一个端点
+            for (Map<String, String> extractedValues : combinations) {
+                CodeEndpoint endpoint = buildEndpoint(buildConfig, extractedValues, projectFilePath, functionId, cu, node);
+                if (endpoint != null) {
+                    results.add(endpoint);
+                }
+            }
             
-            // 构建端点
-            return buildEndpoint(buildConfig, extractedValues, projectFilePath, functionId, cu, node);
+            return results;
             
         } catch (Exception e) {
             log.error("提取端点失败: rule={}, error={}", rule.getName(), e.getMessage(), e);
-            return null;
+            return Collections.emptyList();
         }
+    }
+
+    private List<String> extractFieldValues(
+            ExtractConfig config,
+            ASTNode node,
+            CompilationUnit cu,
+            TypeDeclaration typeDecl,
+            String projectFilePath,
+            String absoluteFilePath) {
+        
+        // 这里的逻辑与之前的 extractField 类似，但支持返回 List<String>
+        // 为了简化，我们先处理 from + trace: auto 的情况，因为这是最可能产生多值的地方
+        
+        if (config.getFrom() != null && "auto".equals(config.getTrace())) {
+            List<String> values = extractFromPathPossibleValues(config.getFrom(), node, cu, typeDecl, projectFilePath, absoluteFilePath);
+            
+            // 如果有 transform，应用到所有值
+            if (values != null && !values.isEmpty() && config.getTransform() != null) {
+                log.debug("[extractFieldValues] 为 {} 个可能值应用 transform: {}", values.size(), config.getTransform());
+                List<String> transformedValues = new ArrayList<>();
+                for (String val : values) {
+                    transformedValues.add(applyTransform(val, config.getTransform()));
+                }
+                return transformedValues;
+            }
+            return values;
+        }
+        
+        // 其他情况暂时退化为单值列表
+        String singleValue = extractField(config, node, cu, typeDecl, new HashMap<>(), projectFilePath, absoluteFilePath);
+        return singleValue != null ? Collections.singletonList(singleValue) : Collections.emptyList();
+    }
+
+    private List<String> extractFromPathPossibleValues(String path, ASTNode node, CompilationUnit cu, TypeDeclaration typeDecl, String projectFilePath, String absoluteFilePath) {
+        if (path.startsWith("argument[") && node instanceof MethodInvocation) {
+            int index = Integer.parseInt(path.substring(9, path.length() - 1));
+            MethodInvocation invocation = (MethodInvocation) node;
+            List<?> args = invocation.arguments();
+            if (index < args.size()) {
+                Expression arg = (Expression) args.get(index);
+                UniversalValueTracer.TraceContext traceContext = new UniversalValueTracer.TraceContext(
+                    cu, typeDecl, findEnclosingMethod(node),
+                    getProjectRoot(absoluteFilePath)
+                );
+                UniversalValueTracer.TraceResult result = valueTracer.trace(arg, traceContext);
+                return result.getPossibleValues();
+            }
+        }
+        
+        // 如果不是 argument[...]，回退到普通提取并转为列表
+        String value = extractFromPath(path, node, cu, typeDecl, null, projectFilePath, absoluteFilePath);
+        return value != null ? Collections.singletonList(value) : Collections.emptyList();
+    }
+
+    private List<Map<String, String>> cartesianProduct(Map<String, List<String>> fieldPossibleValues) {
+        List<Map<String, String>> results = new ArrayList<>();
+        results.add(new HashMap<>());
+        
+        for (Map.Entry<String, List<String>> entry : fieldPossibleValues.entrySet()) {
+            String fieldName = entry.getKey();
+            List<String> values = entry.getValue();
+            
+            List<Map<String, String>> nextBatch = new ArrayList<>();
+            for (Map<String, String> combination : results) {
+                for (String value : values) {
+                    Map<String, String> newCombination = new HashMap<>(combination);
+                    newCombination.put(fieldName, value);
+                    nextBatch.add(newCombination);
+                }
+            }
+            results = nextBatch;
+        }
+        return results;
     }
     
     /**
@@ -357,16 +458,18 @@ public class SimpleEprEngine {
             ASTNode node,
             CompilationUnit cu,
             TypeDeclaration typeDecl,
-            Map<String, String> extractedValues) {
+            Map<String, String> extractedValues,
+            String projectFilePath,
+            String absoluteFilePath) {
         
         log.debug("[extractField] config.from={}, config.mapping={}, config.pattern={}", 
             config.getFrom(), config.getMapping() != null, config.getPattern());
         
         String value = null;
         
-        // 1. 优先从 from 提取（支持 pattern 和 mapping fallback）
+        // 1. 优先 from 提取（支持 pattern 和 mapping fallback）
         if (config.getFrom() != null) {
-            value = extractFromPath(config.getFrom(), node, cu, typeDecl, config.getTrace());
+            value = extractFromPath(config.getFrom(), node, cu, typeDecl, config.getTrace(), projectFilePath, absoluteFilePath);
             
             // 1.1 应用 pattern 提取（如果配置了）
             if (value != null && config.getPattern() != null) {
@@ -411,7 +514,7 @@ public class SimpleEprEngine {
             for (ExtractConfig.StrategyConfig strategy : config.getStrategies()) {
                 ExtractConfig.TryConfig tryConfig = strategy.getTryConfig();
                 if (tryConfig != null) {
-                    value = extractFromTryConfig(tryConfig, node, cu, typeDecl);
+                    value = extractFromTryConfig(tryConfig, node, cu, typeDecl, projectFilePath, absoluteFilePath);
                     if (value != null) {
                         break;
                     }
@@ -437,26 +540,48 @@ public class SimpleEprEngine {
         if (transform == null || value == null) {
             return value;
         }
-        
-        String transformType = transform.toString();
-        
-        switch (transformType) {
-            case "toUpperCase":
-                return value.toUpperCase();
-            
-            case "toLowerCase":
-                return value.toLowerCase();
-            
-            case "extractPath":
-                // 从完整 URL 中提取 path 部分
-                // 输入：{baseUrl}/api/path 或 http://host/api/path
-                // 输出：/api/path
-                return extractPathFromUrl(value);
-            
-            default:
-                log.warn("未知的 transform 类型: {}", transformType);
+
+        if (transform instanceof String) {
+            String transformType = (String) transform;
+            switch (transformType) {
+                case "toUpperCase":
+                    return value.toUpperCase();
+                case "toLowerCase":
+                    return value.toLowerCase();
+                case "extractPath":
+                    return extractPathFromUrl(value, null);
+                default:
+                    log.warn("未知的 transform 类型: {}", transformType);
+                    return value;
+            }
+        } else if (transform instanceof Map) {
+            Map<?, ?> transformMap = (Map<?, ?>) transform;
+            Object typeObj = transformMap.get("type");
+            if (typeObj == null) {
+                log.warn("transform 配置缺少 type 字段: {}", transformMap);
                 return value;
+            }
+
+            String type = typeObj.toString();
+            switch (type) {
+                case "extractPath":
+                    Object regexObj = transformMap.get("regex");
+                    String regex = regexObj != null ? regexObj.toString() : null;
+                    return extractPathFromUrl(value, regex);
+                case "regexReplace":
+                    Object patternObj = transformMap.get("pattern");
+                    Object replacementObj = transformMap.get("replacement");
+                    if (patternObj != null && replacementObj != null) {
+                        return value.replaceAll(patternObj.toString(), replacementObj.toString());
+                    }
+                    return value;
+                default:
+                    log.warn("未知的 transform type: {}", type);
+                    return value;
+            }
         }
+
+        return value;
     }
     
     /**
@@ -500,24 +625,32 @@ public class SimpleEprEngine {
     
     /**
      * 从 URL 中提取 path 部分
-     * 处理两种情况：
-     * 1. {variable}/api/path → /api/path
-     * 2. http://host:port/api/path → /api/path
+     * 
+     * @param url 原始 URL
+     * @param userRegex 用户提供的正则（如果提供，优先使用正则提取）
      */
-    private String extractPathFromUrl(String url) {
+    private String extractPathFromUrl(String url, String userRegex) {
         if (url == null || url.isEmpty()) {
             return url;
         }
-        
-        // 去掉占位符前缀（例如 {baseUrl}/api/path）
-        if (url.contains("}")) {
-            int closeBrace = url.indexOf('}');
-            String remaining = url.substring(closeBrace + 1);
-            if (remaining.startsWith("/")) {
-                return remaining;
+
+        // 1. 如果用户提供了正则，优先使用正则提取
+        if (userRegex != null) {
+            try {
+                Pattern p = Pattern.compile(userRegex);
+                Matcher m = p.matcher(url);
+                if (m.find()) {
+                    // 如果有捕获组，提取第一个捕获组；否则提取整个匹配项
+                    String result = m.groupCount() > 0 ? m.group(1) : m.group(0);
+                    log.debug("使用用户正则 {} 提取路径: {} -> {}", userRegex, url, result);
+                    return result;
+                }
+            } catch (Exception e) {
+                log.warn("用户提供的正则 {} 无效或提取失败: {}", userRegex, e.getMessage());
             }
         }
-        
+
+        // 2. 启发式回退逻辑
         // 处理完整 URL（http://host/path 或 https://host/path）
         if (url.startsWith("http://") || url.startsWith("https://")) {
             try {
@@ -531,12 +664,30 @@ public class SimpleEprEngine {
                 log.warn("解析 URL 失败: {}", url, e);
             }
         }
-        
+
+        // 去掉可能是 baseUrl 的占位符前缀（例如 {baseUrl}/api/path 或 ${service.url}/api/path）
+        if (url.startsWith("{") || url.startsWith("${")) {
+            int closeBrace = url.indexOf('}');
+            if (closeBrace > 0) {
+                String placeholder = url.substring(0, closeBrace + 1).toLowerCase();
+                // 启发式判断：占位符包含以下关键词时，视为需要去掉的 baseUrl
+                if (placeholder.contains("url") || placeholder.contains("host") ||
+                    placeholder.contains("base") || placeholder.contains("server") ||
+                    placeholder.contains("endpoint") || placeholder.contains("domain")) {
+
+                    String remaining = url.substring(closeBrace + 1);
+                    if (remaining.startsWith("/")) {
+                        return remaining;
+                    }
+                }
+            }
+        }
+
         // 如果已经是 path 形式，直接返回
         if (url.startsWith("/")) {
             return url;
         }
-        
+
         // 其他情况，保持原样
         return url;
     }
@@ -544,7 +695,7 @@ public class SimpleEprEngine {
     /**
      * 从路径表达式提取值
      */
-    private String extractFromPath(String path, ASTNode node, CompilationUnit cu, TypeDeclaration typeDecl, String traceMode) {
+    private String extractFromPath(String path, ASTNode node, CompilationUnit cu, TypeDeclaration typeDecl, String traceMode, String projectFilePath, String absoluteFilePath) {
         // 简化实现：支持常见的路径
         
         // argument[0]
@@ -557,10 +708,20 @@ public class SimpleEprEngine {
                 
                 if ("auto".equals(traceMode)) {
                     // 使用追踪器
-                    UniversalValueTracer.TraceContext context = new UniversalValueTracer.TraceContext(
-                        cu, typeDecl, findEnclosingMethod(node)
+                    UniversalValueTracer.TraceContext traceContext = new UniversalValueTracer.TraceContext(
+                        cu, typeDecl, findEnclosingMethod(node),
+                        getProjectRoot(absoluteFilePath)
                     );
-                    UniversalValueTracer.TraceResult result = valueTracer.trace(arg, context);
+                    UniversalValueTracer.TraceResult result = valueTracer.trace(arg, traceContext);
+                    
+                    // 优先使用可能的值列表（支持多环境）
+                    List<String> possibleValues = result.getPossibleValues();
+                    if (possibleValues != null && !possibleValues.isEmpty()) {
+                        // 目前端点属性只支持单个字符串，这里取第一个
+                        // 完善方案：如果有多值，应该在外部循环创建多个端点
+                        return possibleValues.get(0);
+                    }
+                    
                     String traced = result.getValue();
                     
                     // 如果追踪成功，返回追踪值
@@ -804,11 +965,11 @@ public class SimpleEprEngine {
     /**
      * 从 TryConfig 提取值
      */
-    private String extractFromTryConfig(ExtractConfig.TryConfig tryConfig, ASTNode node, CompilationUnit cu, TypeDeclaration typeDecl) {
+    private String extractFromTryConfig(ExtractConfig.TryConfig tryConfig, ASTNode node, CompilationUnit cu, TypeDeclaration typeDecl, String projectFilePath, String absoluteFilePath) {
         // 1. 从路径提取值
         String value = null;
         if (tryConfig.getFrom() != null) {
-            value = extractFromPath(tryConfig.getFrom(), node, cu, typeDecl, null);
+            value = extractFromPath(tryConfig.getFrom(), node, cu, typeDecl, null, projectFilePath, absoluteFilePath);
             log.debug("          tryConfig.from={} => value={}", tryConfig.getFrom(), value);
         }
         
@@ -1055,6 +1216,28 @@ public class SimpleEprEngine {
                 // 使用 PathNormalizer 规范化
                 String normalized = com.poseidon.codegraph.engine.domain.parser.endpoint.tracker.PathNormalizer.normalizePath(pathExpr);
                 if (normalized != null) {
+                    // 启发式判断：如果 PathNormalizer 丢失了过多的结构
+                    // 1. 如果结果只是 {param}，但原始路径包含更多信息
+                    // 2. 如果结果以 {param}/ 开头，但原始路径更具体
+                    boolean lostTooMuch = false;
+                    if (normalized.equals("{param}") && path.length() > 7) {
+                        lostTooMuch = true;
+                    } else if (normalized.startsWith("{param}/") && path.startsWith("/") && !path.startsWith("{param}/")) {
+                        lostTooMuch = true;
+                    }
+
+                    // 3. 如果 path 比 normalized 包含更多前缀信息
+                    // 这通常意味着 PathNormalizer 跳过了包含路径片段的 baseUrl 变量（如 baseUrl = "http://host/v1"）
+                    String pathNormalized = normalizeSpringPathParams(path);
+                    if (pathNormalized.length() > normalized.length() && pathNormalized.endsWith(normalized)) {
+                        log.debug("PathNormalizer 跳过了 baseUrl 中的路径片段，回退到原始路径规范化: {} vs {}", normalized, pathNormalized);
+                        lostTooMuch = true;
+                    }
+
+                    if (lostTooMuch) {
+                        log.debug("回退到从解析后的 path 生成规范化路径: {}", pathNormalized);
+                        return pathNormalized;
+                    }
                     return normalized;
                 }
             }
@@ -1199,6 +1382,20 @@ public class SimpleEprEngine {
         return type + ":" + direction + ":" + UUID.randomUUID();
     }
     
+    private String getProjectRoot(String projectFilePath) {
+        if (projectFilePath == null) return null;
+        // 启发式寻找项目根目录：寻找包含 src 的那一级
+        File file = new File(projectFilePath);
+        File current = file.getParentFile();
+        while (current != null) {
+            if (new File(current, "src").exists() || new File(current, "pom.xml").exists()) {
+                return current.getAbsolutePath();
+            }
+            current = current.getParentFile();
+        }
+        return null;
+    }
+
     /**
      * 查找包含当前节点的方法
      */

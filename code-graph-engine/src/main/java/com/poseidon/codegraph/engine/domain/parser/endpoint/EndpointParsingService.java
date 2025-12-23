@@ -91,7 +91,8 @@ public class EndpointParsingService {
         
         for (EndpointParseRule rule : applicableRules) {
             try {
-                List<CodeEndpoint> parsedEndpoints = eprEngine.executeRule(rule, cu, typeDecl, projectFilePath);
+                // 对于旧的解析方法，absoluteFilePath 传 null，这样就不会触发配置扫描
+                List<CodeEndpoint> parsedEndpoints = eprEngine.executeRule(rule, cu, typeDecl, projectFilePath, null);
                 endpoints.addAll(parsedEndpoints);
                 
                 if (!parsedEndpoints.isEmpty()) {
@@ -120,7 +121,8 @@ public class EndpointParsingService {
             CompilationUnit cu,
             String packageName,
             String fileName,
-            String projectFilePath) {
+            String projectFilePath,
+            String absoluteFilePath) {
         
         if (allRules == null || allRules.isEmpty()) {
             log.debug("没有可用的 EPR 规则");
@@ -139,7 +141,7 @@ public class EndpointParsingService {
         
         for (EndpointParseRule rule : applicableRules) {
             try {
-                List<CodeEndpoint> parsedEndpoints = eprEngine.executeRule(rule, cu, typeDecl, projectFilePath);
+                List<CodeEndpoint> parsedEndpoints = eprEngine.executeRule(rule, cu, typeDecl, projectFilePath, absoluteFilePath);
                 endpoints.addAll(parsedEndpoints);
                 
                 if (!parsedEndpoints.isEmpty()) {

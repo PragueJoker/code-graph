@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Collections;
 
 /**
  * 通用值追踪器
@@ -97,11 +98,27 @@ public class UniversalValueTracer {
                 return trace(initializer, context, depth, visited);
             }
         }
+
+        // 1.1 在当前方法中查找参数定义
+        SingleVariableDeclaration param = findParameterDeclaration(varName, context.getMethod());
+        if (param != null) {
+            // 检查参数上的 @Value 注解
+            TraceResult configResult = findValueFromAnnotation(param.modifiers(), context);
+            if (configResult != null) {
+                return configResult;
+            }
+        }
         
         // 2. 在类中查找字段
         FieldDeclaration field = findFieldInClass(name, context.getTypeDeclaration());
         if (field != null) {
-            // 查找字段初始化值
+            // 2.1 检查 @Value 注解
+            TraceResult configResult = findValueFromAnnotation(field.modifiers(), context);
+            if (configResult != null) {
+                return configResult;
+            }
+
+            // 2.2 查找字段初始化值
             for (Object fragment : field.fragments()) {
                 VariableDeclarationFragment vdf = (VariableDeclarationFragment) fragment;
                 if (vdf.getName().getIdentifier().equals(name)) {
@@ -112,17 +129,124 @@ public class UniversalValueTracer {
                     }
                 }
             }
+
+            // 2.3 特殊处理：如果字段没有初始化值，尝试在构造函数中查找赋值逻辑
+            TraceResult constructorResult = findValueFromConstructor(name, context);
+            if (constructorResult != null) {
+                return constructorResult;
+            }
         }
         
         // 3. 找不到定义，返回占位符
         return TraceResult.partial("{" + name + "}");
     }
+
+    /**
+     * 在构造函数中查找字段的赋值逻辑
+     */
+    private TraceResult findValueFromConstructor(String fieldName, TraceContext context) {
+        TypeDeclaration typeDecl = context.getTypeDeclaration();
+        if (typeDecl == null) return null;
+
+        for (MethodDeclaration method : typeDecl.getMethods()) {
+            if (method.isConstructor()) {
+                // 1. 查找是否直接赋值了带有 @Value 的参数
+                // 例如: this.baseUrl = baseUrl; 且参数 baseUrl 有 @Value
+                for (Object stmt : method.getBody().statements()) {
+                    if (stmt instanceof ExpressionStatement) {
+                        Expression expr = ((ExpressionStatement) stmt).getExpression();
+                        if (expr instanceof Assignment) {
+                            Assignment assign = (Assignment) expr;
+                            Expression left = assign.getLeftHandSide();
+                            Expression right = assign.getRightHandSide();
+
+                            String targetName = null;
+                            if (left instanceof SimpleName && ((SimpleName) left).getIdentifier().equals(fieldName)) {
+                                targetName = fieldName;
+                            } else if (left instanceof FieldAccess && ((FieldAccess) left).getName().getIdentifier().equals(fieldName)) {
+                                targetName = fieldName;
+                            }
+
+                            if (targetName != null && right instanceof SimpleName) {
+                                String paramName = ((SimpleName) right).getIdentifier();
+                                for (Object paramObj : method.parameters()) {
+                                    SingleVariableDeclaration param = (SingleVariableDeclaration) paramObj;
+                                    if (param.getName().getIdentifier().equals(paramName)) {
+                                        TraceResult res = findValueFromAnnotation(param.modifiers(), context);
+                                        if (res != null) return res;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
     
     /**
-     * 追踪字符串拼接
+     * 从注解中寻找 @Value 的值
      */
+    private TraceResult findValueFromAnnotation(List<?> modifiers, TraceContext context) {
+        for (Object modifier : modifiers) {
+            if (modifier instanceof Annotation) {
+                Annotation ann = (Annotation) modifier;
+                if ("Value".equals(ann.getTypeName().toString())) {
+                    String rawValue = null;
+                    if (ann instanceof SingleMemberAnnotation) {
+                        Expression value = ((SingleMemberAnnotation) ann).getValue();
+                        if (value instanceof StringLiteral) {
+                            rawValue = ((StringLiteral) value).getLiteralValue();
+                        }
+                    } else if (ann instanceof NormalAnnotation) {
+                        for (Object pair : ((NormalAnnotation) ann).values()) {
+                            MemberValuePair mvp = (MemberValuePair) pair;
+                            if ("value".equals(mvp.getName().toString())) {
+                                Expression valExpr = mvp.getValue();
+                                if (valExpr instanceof StringLiteral) {
+                                    rawValue = ((StringLiteral) valExpr).getLiteralValue();
+                                }
+                            }
+                        }
+                    }
+
+                    if (rawValue != null) {
+                        // 如果有项目根路径，尝试从全局字典解析
+                        if (context.getProjectRoot() != null) {
+                            ConfigDictionary dict = ConfigRegistry.getDictionary(context.getProjectRoot());
+                            List<String> resolvedValues = dict.resolveAll(rawValue);
+                            log.debug("全局字典解析 @Value: {} -> {}", rawValue, resolvedValues);
+                            return TraceResult.full(resolvedValues);
+                        }
+                        return TraceResult.full(rawValue);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 在方法参数中查找变量
+     */
+    private SingleVariableDeclaration findParameterDeclaration(SimpleName varName, MethodDeclaration method) {
+        if (method == null) {
+            return null;
+        }
+        String targetName = varName.getIdentifier();
+        for (Object param : method.parameters()) {
+            SingleVariableDeclaration svd = (SingleVariableDeclaration) param;
+            if (svd.getName().getIdentifier().equals(targetName)) {
+                return svd;
+            }
+        }
+        return null;
+    }
+    
+    @SuppressWarnings("unchecked")
     private TraceResult traceConcat(InfixExpression expr, TraceContext context, int depth, Set<Expression> visited) {
-        List<String> parts = new ArrayList<>();
+        List<List<String>> allPartsPossibleValues = new ArrayList<>();
         List<ParseLevel> levels = new ArrayList<>();
         
         // 收集所有操作数
@@ -136,17 +260,35 @@ public class UniversalValueTracer {
         // 递归追踪每个操作数
         for (Expression operand : operands) {
             TraceResult result = trace(operand, context, depth, visited);
-            parts.add(result.getValue());
+            allPartsPossibleValues.add(result.getPossibleValues());
             levels.add(result.getLevel());
         }
         
-        // 拼接所有部分
-        String concatenated = String.join("", parts);
+        // 笛卡尔积组合所有部分
+        List<String> concatenatedResults = cartesianProduct(allPartsPossibleValues);
         
         // 确定整体解析等级
         ParseLevel overallLevel = determineOverallLevel(levels);
         
-        return new TraceResult(concatenated, overallLevel);
+        return new TraceResult(concatenatedResults, overallLevel);
+    }
+
+    /**
+     * 计算多个列表的笛卡尔积字符串拼接
+     */
+    private List<String> cartesianProduct(List<List<String>> lists) {
+        List<String> result = new ArrayList<>();
+        result.add("");
+        for (List<String> list : lists) {
+            List<String> nextBatch = new ArrayList<>();
+            for (String prefix : result) {
+                for (String suffix : list) {
+                    nextBatch.add(prefix + suffix);
+                }
+            }
+            result = nextBatch;
+        }
+        return result;
     }
     
     /**
@@ -262,6 +404,20 @@ public class UniversalValueTracer {
         private final CompilationUnit compilationUnit;
         private final TypeDeclaration typeDeclaration;
         private final MethodDeclaration method;
+        private String projectRoot;
+
+        public TraceContext(CompilationUnit compilationUnit, TypeDeclaration typeDeclaration, MethodDeclaration method) {
+            this.compilationUnit = compilationUnit;
+            this.typeDeclaration = typeDeclaration;
+            this.method = method;
+        }
+
+        public TraceContext(CompilationUnit compilationUnit, TypeDeclaration typeDeclaration, MethodDeclaration method, String projectRoot) {
+            this.compilationUnit = compilationUnit;
+            this.typeDeclaration = typeDeclaration;
+            this.method = method;
+            this.projectRoot = projectRoot;
+        }
     }
     
     /**
@@ -270,10 +426,27 @@ public class UniversalValueTracer {
     @Data
     public static class TraceResult {
         private final String value;
+        private final List<String> possibleValues; // 支持多个可能值
         private final ParseLevel level;
+        
+        public TraceResult(String value, ParseLevel level) {
+            this.value = value;
+            this.possibleValues = Collections.singletonList(value);
+            this.level = level;
+        }
+
+        public TraceResult(List<String> possibleValues, ParseLevel level) {
+            this.value = possibleValues.isEmpty() ? "" : possibleValues.get(0);
+            this.possibleValues = possibleValues;
+            this.level = level;
+        }
         
         public static TraceResult full(String value) {
             return new TraceResult(value, ParseLevel.FULL);
+        }
+
+        public static TraceResult full(List<String> values) {
+            return new TraceResult(values, ParseLevel.FULL);
         }
         
         public static TraceResult partial(String value) {

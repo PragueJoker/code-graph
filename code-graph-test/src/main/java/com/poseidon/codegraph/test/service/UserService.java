@@ -16,6 +16,9 @@ public class UserService {
     private final RestTemplate restTemplate;
     private final String baseUrl;
     
+    @Value("${user.service.extra-path}")
+    private String extraPath;
+    
     public UserService(
             RestTemplate restTemplate,
             @Value("${user.service.url:http://localhost:8081}") String baseUrl) {
@@ -27,7 +30,7 @@ public class UserService {
      * 获取用户信息（带路径参数）
      */
     public String getUserById(Long userId) {
-        String url = baseUrl + "/api/users/" + userId;
+        String url = baseUrl + extraPath + "/api/users/" + userId;
         ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
         return response.getBody();
     }

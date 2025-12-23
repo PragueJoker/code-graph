@@ -110,9 +110,9 @@ public class EndpointEnricher implements GraphEnricher {
                 graph.addRelationship(rel);
                 
                 log.info("✓ 构建端点关系: {} -[{}]-> {}", 
-                    function.getQualifiedName(), rel.getRelationshipType(), endpoint.getPath());
+                    function.getQualifiedName(), rel.getRelationshipType(), endpoint.getName());
             } else {
-                log.warn("✗ 端点 function 为空，跳过关系创建: path={}", endpoint.getPath());
+                log.warn("✗ 端点 function 为空，跳过关系创建: name={}", endpoint.getName());
             }
         }
         log.info("端点关系构建完成，共处理 {} 个端点", endpoints.size());

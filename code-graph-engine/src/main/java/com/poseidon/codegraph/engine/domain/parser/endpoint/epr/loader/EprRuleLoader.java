@@ -14,10 +14,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -43,14 +40,20 @@ public class EprRuleLoader {
      * 加载所有 EPR 规则
      */
     public List<EndpointParseRule> loadAllRules() {
-        List<EndpointParseRule> rules = new ArrayList<>();
+        Map<String, EndpointParseRule> ruleMap = new HashMap<>();
         
         // 1. 加载内置规则
-        rules.addAll(loadBuiltinRules());
-        log.info("已加载内置 EPR 规则: {} 条", rules.size());
+        List<EndpointParseRule> builtinRules = loadBuiltinRules();
+        for (EndpointParseRule rule : builtinRules) {
+            // 使用名称作为 Key 进行去重，确保 classpath 下重复加载的规则只保留一个
+            ruleMap.putIfAbsent(rule.getName(), rule);
+        }
+        log.info("已加载内置 EPR 规则: {} 条 (去重后)", ruleMap.size());
         
         // 2. 加载自定义规则（TODO: 从配置路径加载）
         
+        List<EndpointParseRule> rules = new ArrayList<>(ruleMap.values());
+
         // 3. 按优先级排序
         rules.sort(Comparator.comparingInt(EndpointParseRule::getPriority).reversed());
         

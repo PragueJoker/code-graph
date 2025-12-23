@@ -12,7 +12,7 @@ scope:
     - "**.web"
     - "**.web.**"
   packageExcludes:
-    - "**/test/**"  # 只排除 src/test 目录，不排除包名含 test 的业务代码
+    - "**/src/test/**"  # 排除源码中的测试目录，不排除测试用例中的模拟路径
 
 locate:
   nodeType: "MethodDeclaration"

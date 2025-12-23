@@ -7,7 +7,7 @@ import com.poseidon.codegraph.engine.domain.parser.endpoint.EndpointParsingServi
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jdt.core.dom.*;
 
-import java.util.List;
+import java.util.*;
 import java.util.UUID;
 
 /**
@@ -67,7 +67,8 @@ public class EndpointProcessor implements ASTNodeProcessor {
                 context.getCompilationUnit(),
                 context.getPackageName() != null ? context.getPackageName() : "",
                 extractFileName(context.getProjectFilePath()),
-                context.getProjectFilePath()
+                context.getProjectFilePath(),
+                context.getAbsoluteFilePath()
             );
             
             if (endpoints.isEmpty()) {
@@ -98,16 +99,25 @@ public class EndpointProcessor implements ASTNodeProcessor {
     public void onTraversalComplete(ProcessorContext context) {
         // 在 AST 遍历完成后，所有节点都已提取，现在建立端点与函数的关系
         CodeGraph graph = context.getGraph();
-        List<CodeEndpoint> endpoints = graph.getEndpointsAsList();
+        List<CodeEndpoint> allEndpoints = graph.getEndpointsAsList();
         
-        if (endpoints.isEmpty()) {
+        if (allEndpoints.isEmpty()) {
             return;
         }
+
+        // 1. 先进行端点去重（防止同一端点产生多条关系）
+        java.util.Map<String, CodeEndpoint> uniqueEndpoints = new java.util.LinkedHashMap<>();
+        for (CodeEndpoint endpoint : allEndpoints) {
+            uniqueEndpoints.putIfAbsent(endpoint.getId(), endpoint);
+        }
         
-        log.debug("开始构建端点关系，共 {} 个端点", endpoints.size());
+        List<CodeEndpoint> deduplicatedEndpoints = new ArrayList<>(uniqueEndpoints.values());
+        
+        log.debug("开始构建端点关系，原始 {} 个，去重后 {} 个", 
+            allEndpoints.size(), deduplicatedEndpoints.size());
         
         int relationshipCount = 0;
-        for (CodeEndpoint endpoint : endpoints) {
+        for (CodeEndpoint endpoint : deduplicatedEndpoints) {
             // 从 graph 中查找对应的 CodeFunction
             CodeFunction function = findFunctionByEndpoint(graph, endpoint);
             if (function != null) {
@@ -128,7 +138,7 @@ public class EndpointProcessor implements ASTNodeProcessor {
         }
         
         log.info("端点关系构建完成: {} / {} 个端点成功关联函数", 
-            relationshipCount, endpoints.size());
+            relationshipCount, deduplicatedEndpoints.size());
     }
     
     @Override
